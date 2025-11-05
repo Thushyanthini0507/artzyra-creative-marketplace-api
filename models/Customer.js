@@ -2,50 +2,37 @@ import mongoose from "mongoose";
 
 const customerSchema = new mongoose.Schema(
   {
+    customer_id: {
+      type: String,
+      unique: true,
+      required: true,
+    },
     name: {
       type: String,
-      required: [true, "Name is required"],
-      trim: true,
-      unique: true,
+      required: true,
     },
-
     email: {
       type: String,
-      unique: [true, "Email is required"],
+      unique: true,
       lowercase: true,
-      trim: true,
-      match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-        "Please enter a valid email",
-      ],
+      required: true,
     },
-
+    password: {
+      type: String,
+      required: true,
+    },
     phone: {
       type: String,
-      required: [true, "Phone number is required"],
-      unique: true,
-      trim: true,
+      required: true,
     },
-
     address: {
       type: String,
-      required: false,
     },
-
-    notes: {
-      type: String,
-      required: false,
-    },
-
-    createdAt: {
+    join_date: {
       type: Date,
       default: Date.now,
     },
   },
-  {
-    strict: true,
-    versionKey: false,
-  }
+  { timestamps: true }
 );
-
 export default mongoose.model("Customer", customerSchema);

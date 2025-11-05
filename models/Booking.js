@@ -1,44 +1,45 @@
 import mongoose from "mongoose";
 import Customer from "./Customer.js";
 
-const saleSchema = new mongoose.Schema({
-  customer: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Customer.name",
-    required: true,
+const saleSchema = new mongoose.Schema(
+  {
+    booking_id: {
+      type: String,
+      unique: true,
+      required: true,
+    },
+    customer_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
+      required: true,
+    },
+    talent_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Talent",
+      required: true,
+    },
+    booking_date: {
+      type: Date,
+      default: Date.now,
+    },
+    event_date: {
+      type: Date,
+      required: true,
+    },
+    location: {
+      type: String,
+    },
+    status: {
+      type: String,
+      enum: ["Booked", "Completed", "Canceled"],
+      default: "Booked",
+    },
+    payment_status: {
+      type: String,
+      enum: ["Paid", "Pending"],
+      default: "Pending",
+    },
   },
-
-  items: {
-    type: [
-      {
-        item: { type: String, required: true },
-        quantity: { type: Number, required: true },
-        price: { type: Number, required: true },
-      },
-    ],
-    required: true,
-  },
-
-  total: {
-    type: Number,
-    // required: true,
-  },
-
-  status: {
-    type: String,
-    enum: ["pending", "accept", "decline"],
-    default: "pending",
-    trim: true,
-  },
-
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
-
-saleSchema.pre("save", function (next) {
-  this.total = this.items.reduce((acc, item) => acc + item.quantity, 0);
-  next();
-});
+  { timestamps: true }
+);
 export default mongoose.model("Sale", saleSchema);

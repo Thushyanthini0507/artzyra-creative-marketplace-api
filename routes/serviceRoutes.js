@@ -6,13 +6,15 @@ import {
   getServiceById,
   updateService,
 } from "../controllers/serviceController.js";
+import { protect, adminOnly } from "../middleware/auth.js";
 
 const ServiceRouter = express.Router();
 
-ServiceRouter.get("/", getAllService);
-ServiceRouter.get("/:id", getServiceById);
-ServiceRouter.post("/", createService);
-ServiceRouter.put("/:id", updateService);
-ServiceRouter.delete("/:id", deleteService);
+// All service routes require admin access
+ServiceRouter.get("/", protect, adminOnly, getAllService);
+ServiceRouter.get("/:id", protect, adminOnly, getServiceById);
+ServiceRouter.post("/", protect, adminOnly, createService);
+ServiceRouter.put("/:id", protect, adminOnly, updateService);
+ServiceRouter.delete("/:id", protect, adminOnly, deleteService);
 
 export default ServiceRouter;

@@ -30,10 +30,8 @@ app.use(cors());
 
 // Health check route
 app.get("/", (req, res) => {
-  res.send(    "Welcome to Artzyra API"
-  );
+  res.send("Welcome to Artzyra API");
   // console.log("Welcome to Artzyra API");
-  
 });
 
 // API routes

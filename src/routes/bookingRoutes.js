@@ -16,10 +16,15 @@ const bookingRouter = express.Router();
 // Artists can view and update their own bookings
 
 // Get all bookings - Admin only
-bookingRouter.get("/", verifyToken, verifyRole("Admin", "Super Admin"), getAllBookings);
+bookingRouter.get(
+  "/",
+  verifyToken,
+  verifyRole("Admin", "Super Admin", "Customer", "Artist"),
+  getAllBookings
+);
 
 // Get booking by ID - Admin, Customer (own bookings), Artist (own bookings)
-bookingRouter.get("/:id", verifyToken, verifyRole("Admin", "Super Admin", "Customer", "Artist"), getBookingById);
+bookingRouter.get("/:id", verifyToken, verifyRole("Admin", "Super Admin", "Artist"), getBookingById);
 
 // Create booking - Customer and Admin
 bookingRouter.post("/", verifyToken, verifyRole("Customer", "Admin", "Super Admin"), createBooking);

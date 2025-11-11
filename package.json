@@ -2,11 +2,11 @@
   "name": "mini-pos-api",
   "version": "1.0.0",
   "description": "",
-  "main": "app.js",
+  "main": "src/app.js",
   "type": "module",
   "scripts": {
-    "start": "node app.js",
-    "dev": "nodemon app.js",
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
     "seed:auth": "node src/seeds/authSeed.js"
   },
   "author": "",

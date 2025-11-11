@@ -195,9 +195,10 @@ export const updateArtistPassword = asyncHandler(async (req, res) => {
 export const logoutArtist = asyncHandler(async (req, res) => {
   // Since JWT is stateless, logout is handled client-side by removing the token
   // This endpoint provides a consistent API and can be used for logging/logout events
-  
+
   res.status(200).json({
     success: true,
-    message: "Logged out successfully. Please remove the token from client storage.",
+    message:
+      "Logged out successfully. Please remove the token from client storage.",
   });
 });

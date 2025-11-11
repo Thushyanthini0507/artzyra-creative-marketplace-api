@@ -1,10 +1,9 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
-import User from "../../models/User.js";
-import Customer from "../../models/Customer.js";
-import Artist from "../../models/artist.js";
+import User from "../models/User.js";
+import Customer from "../models/Customer.js";
+import Artist from "../models/artist.js";
 
 // Load environment variables
 dotenv.config();
@@ -115,14 +114,8 @@ const seedCustomers = async () => {
         continue;
       }
 
-      // Hash password manually (Customer model doesn't have pre-save hook)
-      const hashedPassword = await bcrypt.hash(customerData.password, 10);
-
-      // Create customer
-      const customer = await Customer.create({
-        ...customerData,
-        password: hashedPassword,
-      });
+      // Create customer (password will be hashed by pre-save hook)
+      const customer = await Customer.create(customerData);
 
       console.log(`✓ Customer created successfully: ${customer.name} (${customer.email})`);
     }

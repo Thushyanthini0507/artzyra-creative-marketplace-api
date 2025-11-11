@@ -24,7 +24,12 @@ ArtistRouter.post("/login", loginArtist);
 // Protected routes - Artist profile management
 ArtistRouter.post("/logout", verifyToken, verifyRole("Artist"), logoutArtist);
 ArtistRouter.get("/me", verifyToken, verifyRole("Artist"), getMeArtist);
-ArtistRouter.put("/updatepassword", verifyToken, verifyRole("Artist"), updateArtistPassword);
+ArtistRouter.put(
+  "/updatepassword",
+  verifyToken,
+  verifyRole("Artist"),
+  updateArtistPassword
+);
 
 // Public route - Get all artists (for browsing)
 ArtistRouter.get("/", getAllArtist);
@@ -33,8 +38,23 @@ ArtistRouter.get("/", getAllArtist);
 ArtistRouter.get("/:id", getArtistById);
 
 // Admin only routes - Artist management
-ArtistRouter.post("/", verifyToken, verifyRole("Admin", "Super Admin"), createArtist);
-ArtistRouter.put("/:id", verifyToken, verifyRole("Admin", "Super Admin", "Artist"), updateArtist);
-ArtistRouter.delete("/:id", verifyToken, verifyRole("Admin", "Super Admin"), deleteArtist);
+ArtistRouter.post(
+  "/",
+  verifyToken,
+  verifyRole("Admin", "Super Admin"),
+  createArtist
+);
+ArtistRouter.put(
+  "/:id",
+  verifyToken,
+  verifyRole("Admin", "Super Admin", "Artist"),
+  updateArtist
+);
+ArtistRouter.delete(
+  "/:id",
+  verifyToken,
+  verifyRole("Admin", "Super Admin"),
+  deleteArtist
+);
 
 export default ArtistRouter;

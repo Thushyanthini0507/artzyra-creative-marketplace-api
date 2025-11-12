@@ -1,5 +1,9 @@
+/**
+ * Category Routes
+ * Public routes for viewing categories
+ * Admin routes for category management
+ */
 import express from "express";
-const router = express.Router();
 import {
   getAllCategories,
   getCategoryById,
@@ -8,36 +12,19 @@ import {
   deleteCategory,
   getArtistsByCategory,
 } from "../controllers/categoryController.js";
-import authenticate from "../middleware/authMiddleware.js";
-import restrictTo from "../middleware/roleMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval } from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/roleMiddleware.js";
 
-// Public routes
+const router = express.Router();
+
+// Public routes - View categories (no authentication required)
 router.get("/", getAllCategories);
 router.get("/:categoryId", getCategoryById);
 router.get("/:categoryId/artists", getArtistsByCategory);
 
-// Admin only routes
-router.post(
-  "/",
-  authenticate,
-  checkApproval,
-  restrictTo("admin"),
-  createCategory
-);
-router.put(
-  "/:categoryId",
-  authenticate,
-  checkApproval,
-  restrictTo("admin"),
-  updateCategory
-);
-router.delete(
-  "/:categoryId",
-  authenticate,
-  checkApproval,
-  restrictTo("admin"),
-  deleteCategory
-);
+// Admin only routes - Category management
+router.post("/", authenticate, checkApproval, adminOnly, createCategory);
+router.put("/:categoryId", authenticate, checkApproval, adminOnly, updateCategory);
+router.delete("/:categoryId", authenticate, checkApproval, adminOnly, deleteCategory);
 
 export default router;

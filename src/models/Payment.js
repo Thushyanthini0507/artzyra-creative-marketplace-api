@@ -1,44 +1,56 @@
 import mongoose from "mongoose";
-import Customer from "./Customer.js";
-import service from "./Category.js";
 
 const paymentSchema = new mongoose.Schema(
   {
-    customer_id: {
+    booking: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: Customer,
+      ref: "Booking",
       required: true,
     },
-    service_type: {
-      type: String,
-      enum: ["Design Order", "Talent Booking"],
+    customer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Customer",
       required: true,
     },
-    service_id: {
+    artist: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: service,
+      ref: "Artist",
       required: true,
     },
     amount: {
       type: Number,
       required: true,
     },
-    payment_method: {
+    currency: {
+      type: String,
+      default: "USD",
+    },
+    paymentMethod: {
       type: String,
       enum: ["Card", "Cash", "Online"],
       required: true,
     },
-    payment_date: {
-      type: Date,
-      default: Date.now,
+    transactionId: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
     status: {
       type: String,
-      enum: ["Success", "Failed", "Pending"],
-      default: "Pending",
+      enum: ["pending", "completed", "failed", "refunded"],
+      default: "pending",
+    },
+    paymentDate: {
+      type: Date,
+      default: Date.now,
     },
   },
   { timestamps: true }
-); // adds createdAt & updatedAt automatically
+);
+
+// Index for efficient queries
+paymentSchema.index({ customer: 1, status: 1 });
+paymentSchema.index({ artist: 1, status: 1 });
+paymentSchema.index({ booking: 1 });
 
 export default mongoose.model("Payment", paymentSchema);

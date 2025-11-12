@@ -1,126 +1,121 @@
+/**
+ * Customer Controller
+ * Handles customer profile management, bookings, and reviews
+ */
 import Customer from "../models/Customer.js";
 import Booking from "../models/Booking.js";
 import Review from "../models/Review.js";
-import Artist from "../models/Artist.js";
+import { NotFoundError } from "../utils/errors.js";
+import { asyncHandler } from "../middleware/authMiddleware.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
 
-// Get customer profile
-const getProfile = async (req, res, next) => {
-  try {
-    const customer = await Customer.findById(req.userId).select("-password");
+/**
+ * Get customer profile
+ * @route GET /api/customer/profile
+ */
+export const getProfile = asyncHandler(async (req, res) => {
+  const customer = await Customer.findById(req.userId).select("-password");
 
-    if (!customer) {
-      return res.status(404).json({
-        success: false,
-        message: "Customer not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        customer,
-      },
-    });
-  } catch (error) {
-    next(error);
+  if (!customer) {
+    throw new NotFoundError("Customer not found");
   }
-};
 
-// Update customer profile
-const updateProfile = async (req, res, next) => {
-  try {
-    const { name, phone, address, profileImage } = req.body;
+  res.json({
+    success: true,
+    data: {
+      customer,
+    },
+  });
+});
 
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
-    if (address) updateData.address = address;
-    if (profileImage) updateData.profileImage = profileImage;
+/**
+ * Update customer profile
+ * @route PUT /api/customer/profile
+ */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const { name, phone, address, profileImage } = req.body;
 
-    const customer = await Customer.findByIdAndUpdate(req.userId, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password");
+  const updateData = {};
+  if (name) updateData.name = name;
+  if (phone) updateData.phone = phone;
+  if (address) updateData.address = address;
+  if (profileImage !== undefined) updateData.profileImage = profileImage;
 
-    res.json({
-      success: true,
-      data: {
-        customer,
-      },
-      message: "Profile updated successfully",
-    });
-  } catch (error) {
-    next(error);
+  const customer = await Customer.findByIdAndUpdate(req.userId, updateData, {
+    new: true,
+    runValidators: true,
+  }).select("-password");
+
+  if (!customer) {
+    throw new NotFoundError("Customer not found");
   }
-};
 
-// Get customer bookings
-const getBookings = async (req, res, next) => {
-  try {
-    const { status, page = 1, limit = 10 } = req.query;
+  res.json({
+    success: true,
+    message: "Profile updated successfully",
+    data: {
+      customer,
+    },
+  });
+});
 
-    const query = { customer: req.userId };
-    if (status) {
-      query.status = status;
-    }
+/**
+ * Get customer bookings with pagination
+ * @route GET /api/customer/bookings
+ */
+export const getBookings = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 10 } = req.query;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const bookings = await Booking.find(query)
-      .populate("artist", "name email phone profileImage rating")
-      .populate("category", "name")
-      .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ bookingDate: -1 });
-
-    const total = await Booking.countDocuments(query);
-
-    res.json({
-      success: true,
-      data: {
-        bookings,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
+  const query = { customer: req.userId };
+  if (status) {
+    query.status = status;
   }
-};
 
-// Get customer reviews
-const getReviews = async (req, res, next) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const reviews = await Review.find({ customer: req.userId })
-      .populate("artist", "name profileImage")
-      .populate("booking", "bookingDate")
-      .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 });
+  const bookings = await Booking.find(query)
+    .populate("artist", "name email phone profileImage rating category")
+    .populate("category", "name description")
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ bookingDate: -1 });
 
-    const total = await Review.countDocuments({ customer: req.userId });
+  const total = await Booking.countDocuments(query);
 
-    res.json({
-      success: true,
-      data: {
-        reviews,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+  const response = formatPaginationResponse(bookings, total, page, limit);
 
-export { getProfile, updateProfile, getBookings, getReviews };
+  res.json({
+    success: true,
+    data: response.data,
+    pagination: response.pagination,
+  });
+});
+
+/**
+ * Get customer reviews with pagination
+ * @route GET /api/customer/reviews
+ */
+export const getReviews = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+
+  const reviews = await Review.find({ customer: req.userId })
+    .populate("artist", "name profileImage category")
+    .populate("booking", "bookingDate startTime endTime")
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ createdAt: -1 });
+
+  const total = await Review.countDocuments({ customer: req.userId });
+
+  const response = formatPaginationResponse(reviews, total, page, limit);
+
+  res.json({
+    success: true,
+    data: response.data,
+    pagination: response.pagination,
+  });
+});

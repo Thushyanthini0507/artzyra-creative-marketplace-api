@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { generateToken } from "../config/jwt.js";
 
 const adminSchema = new mongoose.Schema(
   {
@@ -48,6 +49,11 @@ adminSchema.pre("save", async function (next) {
 // Compare password method
 adminSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Generate JWT token
+adminSchema.methods.getSignedJwtToken = function () {
+  return generateToken({ id: this._id, role: "admin" });
 };
 
 export default mongoose.model("Admin", adminSchema);

@@ -1,5 +1,9 @@
+/**
+ * Review Routes
+ * Public routes for viewing reviews
+ * Protected routes for creating and managing reviews
+ */
 import express from "express";
-const router = express.Router();
 import {
   createReview,
   getReviewsByArtist,
@@ -7,29 +11,48 @@ import {
   updateReview,
   deleteReview,
 } from "../controllers/reviewController.js";
-import authenticate from "../middleware/authMiddleware.js";
-import restrictTo from "../middleware/roleMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval, asyncHandler } from "../middleware/authMiddleware.js";
+import { customerOnly } from "../middleware/roleMiddleware.js";
 
-// Public routes
+const router = express.Router();
+
+// Public routes - View reviews (no authentication required)
 router.get("/artist/:artistId", getReviewsByArtist);
 router.get("/:reviewId", getReviewById);
 
-// Protected routes
+// Protected routes - Create and manage reviews
 router.post(
   "/",
   authenticate,
   checkApproval,
-  restrictTo("customer"),
+  customerOnly,
   createReview
 );
+
 router.put(
   "/:reviewId",
   authenticate,
   checkApproval,
-  restrictTo("customer"),
+  customerOnly,
   updateReview
 );
-router.delete("/:reviewId", authenticate, checkApproval, deleteReview);
+
+// Delete review (customer or admin)
+router.delete(
+  "/:reviewId",
+  authenticate,
+  checkApproval,
+  asyncHandler(async (req, res, next) => {
+    // Allow customer or admin to delete
+    if (req.userRole !== "customer" && req.userRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+    next();
+  }),
+  deleteReview
+);
 
 export default router;

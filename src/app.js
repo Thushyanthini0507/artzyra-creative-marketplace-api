@@ -1,3 +1,7 @@
+/**
+ * Main Application File
+ * Express.js server setup with all routes and middleware
+ */
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
@@ -10,11 +14,10 @@ import adminRoutes from "./routes/adminRoutes.js";
 import artistRoutes from "./routes/artistRoutes.js";
 import customerRoutes from "./routes/customerRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
-import categoryRoutes from "./routes/categoryRoutes.js";
+import categoryRoutes from "./routes/catergoryRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
-import searchRoutes from "./routes/searchRoutes.js";
 
 // Connect to database
 connectDB();
@@ -46,7 +49,6 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reviews", reviewRoutes);
 app.use("/api/notifications", notificationRoutes);
-// app.use('/api/search', searchRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,234 +1,206 @@
+/**
+ * Category Controller
+ * Handles category CRUD operations and artist filtering by category
+ */
 import Category from "../models/Category.js";
 import Artist from "../models/Artist.js";
-import { buildSearchQuery, paginate } from "../utils/helpers.js";
+import { NotFoundError, BadRequestError } from "../utils/errors.js";
+import { asyncHandler } from "../middleware/authMiddleware.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
 
-// Get all categories
-const getAllCategories = async (req, res, next) => {
-  try {
-    const { search, isActive, page = 1, limit = 10 } = req.query;
+/**
+ * Get all categories with pagination
+ * @route GET /api/categories
+ */
+export const getAllCategories = asyncHandler(async (req, res) => {
+  const { search, isActive, page = 1, limit = 10 } = req.query;
 
-    const query = {};
-    if (isActive !== undefined) {
-      query.isActive = isActive === "true";
-    }
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
-    }
-
-    const { skip, limit: limitNum } = paginate(page, limit);
-    const categories = await Category.find(query)
-      .skip(skip)
-      .limit(limitNum)
-      .sort({ name: 1 });
-
-    const total = await Category.countDocuments(query);
-
-    res.json({
-      success: true,
-      data: {
-        categories,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
+  const query = {};
+  if (isActive !== undefined) {
+    query.isActive = isActive === "true";
   }
-};
 
-// Get category by ID
-const getCategoryById = async (req, res, next) => {
-  try {
-    const { categoryId } = req.params;
-
-    const category = await Category.findById(categoryId);
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        category,
-      },
-    });
-  } catch (error) {
-    next(error);
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } },
+    ];
   }
-};
 
-// Create category (Admin only)
-const createCategory = async (req, res, next) => {
-  try {
-    const { name, description, image } = req.body;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
 
-    if (!name) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide a category name",
-      });
-    }
+  const categories = await Category.find(query)
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ name: 1 });
 
-    const category = await Category.create({
-      name,
-      description,
-      image,
-    });
+  const total = await Category.countDocuments(query);
 
-    res.status(201).json({
-      success: true,
-      data: {
-        category,
-      },
-      message: "Category created successfully",
-    });
-  } catch (error) {
-    next(error);
+  const response = formatPaginationResponse(categories, total, page, limit);
+
+  res.json({
+    success: true,
+    data: response.data,
+    pagination: response.pagination,
+  });
+});
+
+/**
+ * Get category by ID
+ * @route GET /api/categories/:categoryId
+ */
+export const getCategoryById = asyncHandler(async (req, res) => {
+  const { categoryId } = req.params;
+
+  const category = await Category.findById(categoryId);
+  if (!category) {
+    throw new NotFoundError("Category not found");
   }
-};
 
-// Update category (Admin only)
-const updateCategory = async (req, res, next) => {
-  try {
-    const { categoryId } = req.params;
-    const { name, description, image, isActive } = req.body;
+  res.json({
+    success: true,
+    data: {
+      category,
+    },
+  });
+});
 
-    const category = await Category.findById(categoryId);
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
+/**
+ * Create category (Admin only)
+ * @route POST /api/categories
+ */
+export const createCategory = asyncHandler(async (req, res) => {
+  const { name, description, image } = req.body;
 
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (description !== undefined) updateData.description = description;
-    if (image !== undefined) updateData.image = image;
-    if (isActive !== undefined) updateData.isActive = isActive;
+  if (!name) {
+    throw new BadRequestError("Please provide a category name");
+  }
 
-    const updatedCategory = await Category.findByIdAndUpdate(
-      categoryId,
-      updateData,
-      { new: true, runValidators: true }
+  const category = await Category.create({
+    name,
+    description,
+    image,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: "Category created successfully",
+    data: {
+      category,
+    },
+  });
+});
+
+/**
+ * Update category (Admin only)
+ * @route PUT /api/categories/:categoryId
+ */
+export const updateCategory = asyncHandler(async (req, res) => {
+  const { categoryId } = req.params;
+  const { name, description, image, isActive } = req.body;
+
+  const category = await Category.findById(categoryId);
+  if (!category) {
+    throw new NotFoundError("Category not found");
+  }
+
+  const updateData = {};
+  if (name) updateData.name = name;
+  if (description !== undefined) updateData.description = description;
+  if (image !== undefined) updateData.image = image;
+  if (isActive !== undefined) updateData.isActive = isActive;
+
+  const updatedCategory = await Category.findByIdAndUpdate(
+    categoryId,
+    updateData,
+    { new: true, runValidators: true }
+  );
+
+  res.json({
+    success: true,
+    message: "Category updated successfully",
+    data: {
+      category: updatedCategory,
+    },
+  });
+});
+
+/**
+ * Delete category (Admin only)
+ * @route DELETE /api/categories/:categoryId
+ */
+export const deleteCategory = asyncHandler(async (req, res) => {
+  const { categoryId } = req.params;
+
+  const category = await Category.findById(categoryId);
+  if (!category) {
+    throw new NotFoundError("Category not found");
+  }
+
+  // Check if category is used by any artists
+  const artistsCount = await Artist.countDocuments({ category: categoryId });
+  if (artistsCount > 0) {
+    throw new BadRequestError(
+      `Cannot delete category. It is used by ${artistsCount} artist(s).`
     );
-
-    res.json({
-      success: true,
-      data: {
-        category: updatedCategory,
-      },
-      message: "Category updated successfully",
-    });
-  } catch (error) {
-    next(error);
   }
-};
 
-// Delete category (Admin only)
-const deleteCategory = async (req, res, next) => {
-  try {
-    const { categoryId } = req.params;
+  await Category.findByIdAndDelete(categoryId);
 
-    const category = await Category.findById(categoryId);
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
+  res.json({
+    success: true,
+    message: "Category deleted successfully",
+  });
+});
 
-    // Check if category is used by any artists
-    const artistsCount = await Artist.countDocuments({ category: categoryId });
-    if (artistsCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Cannot delete category. It is used by ${artistsCount} artist(s).`,
-      });
-    }
+/**
+ * Get artists by category with pagination
+ * @route GET /api/categories/:categoryId/artists
+ */
+export const getArtistsByCategory = asyncHandler(async (req, res) => {
+  const { categoryId } = req.params;
+  const { search, minRating, maxRate, page = 1, limit = 10 } = req.query;
 
-    await Category.findByIdAndDelete(categoryId);
+  const query = {
+    category: categoryId,
+    isApproved: true,
+    isActive: true,
+  };
 
-    res.json({
-      success: true,
-      message: "Category deleted successfully",
-    });
-  } catch (error) {
-    next(error);
+  if (minRating) {
+    query.rating = { $gte: parseFloat(minRating) };
   }
-};
 
-// Get artists by category
-const getArtistsByCategory = async (req, res, next) => {
-  try {
-    const { categoryId } = req.params;
-    const { search, minRating, maxRate, page = 1, limit = 10 } = req.query;
-
-    const query = {
-      category: categoryId,
-      isApproved: true,
-      isActive: true,
-    };
-
-    if (minRating) {
-      query.rating = { $gte: parseFloat(minRating) };
-    }
-
-    if (maxRate) {
-      query.hourlyRate = { $lte: parseFloat(maxRate) };
-    }
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { bio: { $regex: search, $options: "i" } },
-        { skills: { $in: [new RegExp(search, "i")] } },
-      ];
-    }
-
-    const { skip, limit: limitNum } = paginate(page, limit);
-    const artists = await Artist.find(query)
-      .select("-password")
-      .populate("category", "name")
-      .skip(skip)
-      .limit(limitNum)
-      .sort({ rating: -1, createdAt: -1 });
-
-    const total = await Artist.countDocuments(query);
-
-    res.json({
-      success: true,
-      data: {
-        artists,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
+  if (maxRate) {
+    query.hourlyRate = { $lte: parseFloat(maxRate) };
   }
-};
 
-export {
-  getAllCategories,
-  getCategoryById,
-  createCategory,
-  updateCategory,
-  deleteCategory,
-  getArtistsByCategory,
-};
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { bio: { $regex: search, $options: "i" } },
+      { skills: { $in: [new RegExp(search, "i")] } },
+    ];
+  }
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+
+  const artists = await Artist.find(query)
+    .select("-password")
+    .populate("category", "name description image")
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ rating: -1, createdAt: -1 });
+
+  const total = await Artist.countDocuments(query);
+
+  const response = formatPaginationResponse(artists, total, page, limit);
+
+  res.json({
+    success: true,
+    data: response.data,
+    pagination: response.pagination,
+  });
+});

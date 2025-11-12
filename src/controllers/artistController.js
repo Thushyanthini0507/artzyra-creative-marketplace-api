@@ -1,316 +1,307 @@
+/**
+ * Artist Controller
+ * Handles artist profile management, bookings, reviews, and availability
+ */
 import Artist from "../models/Artist.js";
 import Booking from "../models/Booking.js";
 import Review from "../models/Review.js";
 import Category from "../models/Category.js";
 import { isTimeSlotAvailable, createNotification } from "../utils/helpers.js";
 import Notification from "../models/Notification.js";
+import {
+  NotFoundError,
+  BadRequestError,
+  ForbiddenError,
+} from "../utils/errors.js";
+import { asyncHandler } from "../middleware/authMiddleware.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
 
-// Get artist profile
-const getProfile = async (req, res, next) => {
-  try {
-    const artist = await Artist.findById(req.userId)
-      .populate("category", "name description")
-      .select("-password");
+/**
+ * Get artist profile
+ * @route GET /api/artist/profile
+ */
+export const getProfile = asyncHandler(async (req, res) => {
+  const artist = await Artist.findById(req.userId)
+    .populate("category", "name description image")
+    .select("-password");
 
-    if (!artist) {
-      return res.status(404).json({
-        success: false,
-        message: "Artist not found",
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        artist,
-      },
-    });
-  } catch (error) {
-    next(error);
+  if (!artist) {
+    throw new NotFoundError("Artist not found");
   }
-};
 
-// Update artist profile
-const updateProfile = async (req, res, next) => {
-  try {
-    const {
-      name,
-      phone,
-      bio,
-      category,
-      skills,
-      hourlyRate,
-      availability,
-      profileImage,
-    } = req.body;
+  res.json({
+    success: true,
+    data: {
+      artist,
+    },
+  });
+});
 
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (phone) updateData.phone = phone;
-    if (bio) updateData.bio = bio;
-    if (category) updateData.category = category;
-    if (skills) updateData.skills = skills;
-    if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate;
-    if (availability) updateData.availability = availability;
-    if (profileImage) updateData.profileImage = profileImage;
+/**
+ * Update artist profile
+ * @route PUT /api/artist/profile
+ */
+export const updateProfile = asyncHandler(async (req, res) => {
+  const {
+    name,
+    phone,
+    bio,
+    category,
+    skills,
+    hourlyRate,
+    availability,
+    profileImage,
+  } = req.body;
 
-    const artist = await Artist.findByIdAndUpdate(req.userId, updateData, {
-      new: true,
-      runValidators: true,
-    }).select("-password");
+  const updateData = {};
+  if (name) updateData.name = name;
+  if (phone) updateData.phone = phone;
+  if (bio !== undefined) updateData.bio = bio;
+  if (category) updateData.category = category;
+  if (skills) updateData.skills = skills;
+  if (hourlyRate !== undefined) updateData.hourlyRate = hourlyRate;
+  if (availability) updateData.availability = availability;
+  if (profileImage !== undefined) updateData.profileImage = profileImage;
 
-    res.json({
-      success: true,
-      data: {
-        artist,
-      },
-      message: "Profile updated successfully",
-    });
-  } catch (error) {
-    next(error);
+  const artist = await Artist.findByIdAndUpdate(req.userId, updateData, {
+    new: true,
+    runValidators: true,
+  })
+    .populate("category", "name description image")
+    .select("-password");
+
+  if (!artist) {
+    throw new NotFoundError("Artist not found");
   }
-};
 
-// Get artist bookings
-const getBookings = async (req, res, next) => {
-  try {
-    const { status, page = 1, limit = 10 } = req.query;
+  res.json({
+    success: true,
+    message: "Profile updated successfully",
+    data: {
+      artist,
+    },
+  });
+});
 
-    const query = { artist: req.userId };
-    if (status) {
-      query.status = status;
-    }
+/**
+ * Get artist bookings with pagination
+ * @route GET /api/artist/bookings
+ */
+export const getBookings = asyncHandler(async (req, res) => {
+  const { status, page = 1, limit = 10 } = req.query;
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const bookings = await Booking.find(query)
-      .populate("customer", "name email phone")
-      .populate("category", "name")
-      .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ bookingDate: -1 });
-
-    const total = await Booking.countDocuments(query);
-
-    res.json({
-      success: true,
-      data: {
-        bookings,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
+  const query = { artist: req.userId };
+  if (status) {
+    query.status = status;
   }
-};
 
-// Accept booking
-const acceptBooking = async (req, res, next) => {
-  try {
-    const { bookingId } = req.params;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
 
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: "Booking not found",
-      });
-    }
+  const bookings = await Booking.find(query)
+    .populate("customer", "name email phone profileImage")
+    .populate("category", "name description")
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ bookingDate: -1 });
 
-    if (booking.artist.toString() !== req.userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to accept this booking",
-      });
-    }
+  const total = await Booking.countDocuments(query);
 
-    if (booking.status !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: `Booking is already ${booking.status}`,
-      });
-    }
+  const response = formatPaginationResponse(bookings, total, page, limit);
 
-    booking.status = "accepted";
-    await booking.save();
+  res.json({
+    success: true,
+    data: response.data,
+    pagination: response.pagination,
+  });
+});
 
-    // Create notification for customer
-    await createNotification(
-      Notification,
-      booking.customer,
-      "Customer",
-      "booking_accepted",
-      "Booking Accepted",
-      `Your booking has been accepted by the artist.`,
-      booking._id,
-      "Booking"
+/**
+ * Accept booking
+ * @route PUT /api/artist/bookings/:bookingId/accept
+ */
+export const acceptBooking = asyncHandler(async (req, res) => {
+  const { bookingId } = req.params;
+
+  const booking = await Booking.findById(bookingId)
+    .populate("customer", "name email")
+    .populate("artist", "name");
+
+  if (!booking) {
+    throw new NotFoundError("Booking not found");
+  }
+
+  // Check authorization
+  if (booking.artist._id.toString() !== req.userId.toString()) {
+    throw new ForbiddenError(
+      "You are not authorized to accept this booking"
     );
-
-    res.json({
-      success: true,
-      data: {
-        booking,
-      },
-      message: "Booking accepted successfully",
-    });
-  } catch (error) {
-    next(error);
   }
-};
 
-// Reject booking
-const rejectBooking = async (req, res, next) => {
-  try {
-    const { bookingId } = req.params;
-    const { reason } = req.body;
+  if (booking.status !== "pending") {
+    throw new BadRequestError(`Booking is already ${booking.status}`);
+  }
 
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({
-        success: false,
-        message: "Booking not found",
-      });
-    }
+  booking.status = "accepted";
+  await booking.save();
 
-    if (booking.artist.toString() !== req.userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to reject this booking",
-      });
-    }
+  // Create notification for customer
+  await createNotification(
+    Notification,
+    booking.customer._id,
+    "Customer",
+    "booking_accepted",
+    "Booking Accepted",
+    `Your booking has been accepted by ${booking.artist.name}.`,
+    booking._id,
+    "Booking"
+  );
 
-    if (booking.status !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: `Booking is already ${booking.status}`,
-      });
-    }
+  res.json({
+    success: true,
+    message: "Booking accepted successfully",
+    data: {
+      booking,
+    },
+  });
+});
 
-    booking.status = "rejected";
-    await booking.save();
+/**
+ * Reject booking
+ * @route PUT /api/artist/bookings/:bookingId/reject
+ */
+export const rejectBooking = asyncHandler(async (req, res) => {
+  const { bookingId } = req.params;
+  const { reason } = req.body;
 
-    // Create notification for customer
-    await createNotification(
-      Notification,
-      booking.customer,
-      "Customer",
-      "booking_rejected",
-      "Booking Rejected",
-      `Your booking has been rejected.${reason ? ` Reason: ${reason}` : ""}`,
-      booking._id,
-      "Booking"
+  const booking = await Booking.findById(bookingId)
+    .populate("customer", "name email")
+    .populate("artist", "name");
+
+  if (!booking) {
+    throw new NotFoundError("Booking not found");
+  }
+
+  // Check authorization
+  if (booking.artist._id.toString() !== req.userId.toString()) {
+    throw new ForbiddenError(
+      "You are not authorized to reject this booking"
     );
-
-    res.json({
-      success: true,
-      data: {
-        booking,
-      },
-      message: "Booking rejected successfully",
-    });
-  } catch (error) {
-    next(error);
   }
-};
 
-// Check availability
-const checkAvailability = async (req, res, next) => {
-  try {
-    const { date, startTime, endTime } = req.query;
+  if (booking.status !== "pending") {
+    throw new BadRequestError(`Booking is already ${booking.status}`);
+  }
 
-    if (!date || !startTime || !endTime) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide date, startTime, and endTime",
-      });
-    }
+  booking.status = "rejected";
+  await booking.save();
 
-    const artist = await Artist.findById(req.userId);
-    const isAvailable = isTimeSlotAvailable(
-      artist.availability,
-      date,
-      startTime,
-      endTime
+  // Create notification for customer
+  await createNotification(
+    Notification,
+    booking.customer._id,
+    "Customer",
+    "booking_rejected",
+    "Booking Rejected",
+    `Your booking has been rejected.${reason ? ` Reason: ${reason}` : ""}`,
+    booking._id,
+    "Booking"
+  );
+
+  res.json({
+    success: true,
+    message: "Booking rejected successfully",
+    data: {
+      booking,
+    },
+  });
+});
+
+/**
+ * Check availability
+ * @route GET /api/artist/availability
+ */
+export const checkAvailability = asyncHandler(async (req, res) => {
+  const { date, startTime, endTime } = req.query;
+
+  if (!date || !startTime || !endTime) {
+    throw new BadRequestError(
+      "Please provide date, startTime, and endTime"
     );
-
-    // Check for existing bookings
-    const existingBooking = await Booking.findOne({
-      artist: req.userId,
-      bookingDate: new Date(date),
-      status: { $in: ["pending", "accepted"] },
-      $or: [
-        {
-          startTime: { $lte: startTime },
-          endTime: { $gte: startTime },
-        },
-        {
-          startTime: { $lte: endTime },
-          endTime: { $gte: endTime },
-        },
-      ],
-    });
-
-    const available = isAvailable && !existingBooking;
-
-    res.json({
-      success: true,
-      data: {
-        available,
-        message: available
-          ? "Time slot is available"
-          : "Time slot is not available",
-      },
-    });
-  } catch (error) {
-    next(error);
   }
-};
 
-// Get artist reviews
-const getReviews = async (req, res, next) => {
-  try {
-    const { page = 1, limit = 10 } = req.query;
-
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const reviews = await Review.find({ artist: req.userId, isVisible: true })
-      .populate("customer", "name profileImage")
-      .populate("booking", "bookingDate")
-      .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 });
-
-    const total = await Review.countDocuments({
-      artist: req.userId,
-      isVisible: true,
-    });
-
-    res.json({
-      success: true,
-      data: {
-        reviews,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
-      },
-    });
-  } catch (error) {
-    next(error);
+  const artist = await Artist.findById(req.userId);
+  if (!artist) {
+    throw new NotFoundError("Artist not found");
   }
-};
 
-export {
-  getProfile,
-  updateProfile,
-  getBookings,
-  acceptBooking,
-  rejectBooking,
-  checkAvailability,
-  getReviews,
-};
+  const isAvailable = isTimeSlotAvailable(
+    artist.availability,
+    date,
+    startTime,
+    endTime
+  );
+
+  // Check for existing bookings
+  const existingBooking = await Booking.findOne({
+    artist: req.userId,
+    bookingDate: new Date(date),
+    status: { $in: ["pending", "accepted"] },
+    $or: [
+      {
+        startTime: { $lte: startTime },
+        endTime: { $gte: startTime },
+      },
+      {
+        startTime: { $lte: endTime },
+        endTime: { $gte: endTime },
+      },
+    ],
+  });
+
+  const available = isAvailable && !existingBooking;
+
+  res.json({
+    success: true,
+    data: {
+      available,
+      message: available
+        ? "Time slot is available"
+        : "Time slot is not available",
+    },
+  });
+});
+
+/**
+ * Get artist reviews with pagination
+ * @route GET /api/artist/reviews
+ */
+export const getReviews = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+
+  const reviews = await Review.find({
+    artist: req.userId,
+    isVisible: true,
+  })
+    .populate("customer", "name profileImage")
+    .populate("booking", "bookingDate startTime endTime")
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ createdAt: -1 });
+
+  const total = await Review.countDocuments({
+    artist: req.userId,
+    isVisible: true,
+  });
+
+  const response = formatPaginationResponse(reviews, total, page, limit);
+
+  res.json({
+    success: true,
+    data: response.data,
+    pagination: response.pagination,
+  });
+});

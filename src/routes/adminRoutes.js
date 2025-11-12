@@ -1,23 +1,27 @@
+/**
+ * Admin Routes
+ * All routes require authentication, approval, and admin role
+ */
 import express from "express";
-const router = express.Router();
 import {
   approveUser,
-  getAllUsers,
+  getUsersByRole,
   getUserById,
   getAllBookings,
   getDashboardStats,
 } from "../controllers/adminController.js";
-import authenticate from "../middleware/authMiddleware.js";
-import restrictTo from "../middleware/roleMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval } from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/roleMiddleware.js";
 
-// All admin routes require authentication and admin role
+const router = express.Router();
+
+// All admin routes require authentication, approval, and admin role
 router.use(authenticate);
 router.use(checkApproval);
-router.use(restrictTo("admin"));
+router.use(adminOnly);
 
 router.post("/users/approve", approveUser);
-router.get("/users", getAllUsers);
+router.get("/users", getUsersByRole);
 router.get("/users/:role/:userId", getUserById);
 router.get("/bookings", getAllBookings);
 router.get("/dashboard/stats", getDashboardStats);

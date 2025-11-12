@@ -1,26 +1,38 @@
+/**
+ * Notification Routes
+ * Routes for managing user notifications
+ */
 import express from "express";
-const router = express.Router();
 import Notification from "../models/Notification.js";
-import authenticate from "../middleware/authMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval, asyncHandler } from "../middleware/authMiddleware.js";
+import { NotFoundError, ForbiddenError } from "../utils/errors.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
+
+const router = express.Router();
 
 // All notification routes require authentication
 router.use(authenticate);
 router.use(checkApproval);
 
-// Get user notifications
-router.get("/", async (req, res, next) => {
-  try {
+/**
+ * Get user notifications with pagination
+ * @route GET /api/notifications
+ */
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
     const { isRead, page = 1, limit = 20 } = req.query;
+
+    const userModel =
+      req.userRole === "admin"
+        ? "Admin"
+        : req.userRole === "artist"
+        ? "Artist"
+        : "Customer";
 
     const query = {
       user: req.userId,
-      userModel:
-        req.userRole === "admin"
-          ? "Admin"
-          : req.userRole === "artist"
-          ? "Artist"
-          : "Customer",
+      userModel,
     };
 
     if (isRead !== undefined) {
@@ -28,10 +40,12 @@ router.get("/", async (req, res, next) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitNum = parseInt(limit);
+
     const notifications = await Notification.find(query)
       .populate("relatedId")
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limitNum)
       .sort({ createdAt: -1 });
 
     const total = await Notification.countDocuments(query);
@@ -40,42 +54,37 @@ router.get("/", async (req, res, next) => {
       isRead: false,
     });
 
+    const response = formatPaginationResponse(notifications, total, page, limit);
+
     res.json({
       success: true,
       data: {
-        notifications,
+        notifications: response.data,
         unreadCount,
-        pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
-          total,
-          pages: Math.ceil(total / parseInt(limit)),
-        },
+        pagination: response.pagination,
       },
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
-// Mark notification as read
-router.put("/:notificationId/read", async (req, res, next) => {
-  try {
+/**
+ * Mark notification as read
+ * @route PUT /api/notifications/:notificationId/read
+ */
+router.put(
+  "/:notificationId/read",
+  asyncHandler(async (req, res) => {
     const { notificationId } = req.params;
 
     const notification = await Notification.findById(notificationId);
     if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: "Notification not found",
-      });
+      throw new NotFoundError("Notification not found");
     }
 
     if (notification.user.toString() !== req.userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to update this notification",
-      });
+      throw new ForbiddenError(
+        "You are not authorized to update this notification"
+      );
     }
 
     notification.isRead = true;
@@ -83,28 +92,32 @@ router.put("/:notificationId/read", async (req, res, next) => {
 
     res.json({
       success: true,
+      message: "Notification marked as read",
       data: {
         notification,
       },
-      message: "Notification marked as read",
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
-// Mark all notifications as read
-router.put("/read-all", async (req, res, next) => {
-  try {
+/**
+ * Mark all notifications as read
+ * @route PUT /api/notifications/read-all
+ */
+router.put(
+  "/read-all",
+  asyncHandler(async (req, res) => {
+    const userModel =
+      req.userRole === "admin"
+        ? "Admin"
+        : req.userRole === "artist"
+        ? "Artist"
+        : "Customer";
+
     await Notification.updateMany(
       {
         user: req.userId,
-        userModel:
-          req.userRole === "admin"
-            ? "Admin"
-            : req.userRole === "artist"
-            ? "Artist"
-            : "Customer",
+        userModel,
         isRead: false,
       },
       { isRead: true }
@@ -114,29 +127,27 @@ router.put("/read-all", async (req, res, next) => {
       success: true,
       message: "All notifications marked as read",
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
-// Delete notification
-router.delete("/:notificationId", async (req, res, next) => {
-  try {
+/**
+ * Delete notification
+ * @route DELETE /api/notifications/:notificationId
+ */
+router.delete(
+  "/:notificationId",
+  asyncHandler(async (req, res) => {
     const { notificationId } = req.params;
 
     const notification = await Notification.findById(notificationId);
     if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: "Notification not found",
-      });
+      throw new NotFoundError("Notification not found");
     }
 
     if (notification.user.toString() !== req.userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not authorized to delete this notification",
-      });
+      throw new ForbiddenError(
+        "You are not authorized to delete this notification"
+      );
     }
 
     await Notification.findByIdAndDelete(notificationId);
@@ -145,9 +156,7 @@ router.delete("/:notificationId", async (req, res, next) => {
       success: true,
       message: "Notification deleted successfully",
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  })
+);
 
 export default router;

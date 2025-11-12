@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { generateToken } from "../config/jwt.js";
 
 const customerSchema = new mongoose.Schema(
   {
@@ -67,6 +68,11 @@ customerSchema.pre("save", async function (next) {
 // Compare password method
 customerSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Generate JWT token
+customerSchema.methods.getSignedJwtToken = function () {
+  return generateToken({ id: this._id, role: "customer" });
 };
 
 export default mongoose.model("Customer", customerSchema);

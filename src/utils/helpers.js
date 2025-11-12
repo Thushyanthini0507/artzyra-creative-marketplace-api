@@ -22,15 +22,6 @@ const calculateBookingAmount = (hourlyRate, duration) => {
   return hourlyRate * duration;
 };
 
-const formatDate = (date) => {
-  return new Date(date).toISOString().split('T')[0];
-};
-
-const formatTime = (time) => {
-  // Assuming time is in HH:MM format
-  return time;
-};
-
 const isTimeSlotAvailable = (availability, date, startTime, endTime) => {
   // Placeholder for availability checking logic
   // In production, implement proper time slot validation
@@ -51,28 +42,9 @@ const isTimeSlotAvailable = (availability, date, startTime, endTime) => {
   return true;
 };
 
-const paginate = (page = 1, limit = 10) => {
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  return { skip, limit: parseInt(limit) };
-};
-
-const buildSearchQuery = (searchTerm, searchFields) => {
-  if (!searchTerm) return {};
-  
-  return {
-    $or: searchFields.map(field => ({
-      [field]: { $regex: searchTerm, $options: 'i' }
-    }))
-  };
-};
-
 export {
   createNotification,
   calculateBookingAmount,
-  formatDate,
-  formatTime,
   isTimeSlotAvailable,
-  paginate,
-  buildSearchQuery,
 };
 

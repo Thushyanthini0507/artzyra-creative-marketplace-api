@@ -1,19 +1,23 @@
+/**
+ * Customer Routes
+ * All routes require authentication and customer role
+ */
 import express from "express";
-const router = express.Router();
 import {
   getProfile,
   updateProfile,
   getBookings,
   getReviews,
 } from "../controllers/customerController.js";
-import authenticate from "../middleware/authMiddleware.js";
-import restrictTo from "../middleware/roleMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval } from "../middleware/authMiddleware.js";
+import { customerOnly } from "../middleware/roleMiddleware.js";
 
-// All customer routes require authentication and customer role
+const router = express.Router();
+
+// All customer routes require authentication, approval, and customer role
 router.use(authenticate);
 router.use(checkApproval);
-router.use(restrictTo("customer"));
+router.use(customerOnly);
 
 router.get("/profile", getProfile);
 router.put("/profile", updateProfile);

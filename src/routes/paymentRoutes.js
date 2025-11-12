@@ -1,21 +1,25 @@
+/**
+ * Payment Routes
+ * Routes for payment processing and management
+ */
 import express from "express";
-const router = express.Router();
 import {
   createPayment,
   getPaymentById,
   getPayments,
   refundPaymentRequest,
 } from "../controllers/paymentController.js";
-import authenticate from "../middleware/authMiddleware.js";
-import restrictTo from "../middleware/roleMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval } from "../middleware/authMiddleware.js";
+import { customerOnly, adminOnly } from "../middleware/roleMiddleware.js";
+
+const router = express.Router();
 
 // All payment routes require authentication
 router.use(authenticate);
 router.use(checkApproval);
 
 // Create payment (customer only)
-router.post("/", restrictTo("customer"), createPayment);
+router.post("/", customerOnly, createPayment);
 
 // Get payments (customer, artist, admin)
 router.get("/", getPayments);
@@ -24,6 +28,6 @@ router.get("/", getPayments);
 router.get("/:paymentId", getPaymentById);
 
 // Refund payment (admin only)
-router.post("/:paymentId/refund", restrictTo("admin"), refundPaymentRequest);
+router.post("/:paymentId/refund", adminOnly, refundPaymentRequest);
 
 export default router;

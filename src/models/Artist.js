@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
+import { generateToken } from "../config/jwt.js";
 
 const artistSchema = new mongoose.Schema(
   {
@@ -97,6 +98,11 @@ artistSchema.pre("save", async function (next) {
 // Compare password method
 artistSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Generate JWT token
+artistSchema.methods.getSignedJwtToken = function () {
+  return generateToken({ id: this._id, role: "artist" });
 };
 
 // Index for search

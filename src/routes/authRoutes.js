@@ -1,20 +1,19 @@
+/**
+ * Authentication Routes
+ * Public routes for login
+ * Protected routes for user profile management
+ */
 import express from "express";
-const router = express.Router();
 import {
-  registerAdmin,
-  registerArtist,
-  registerCustomer,
   login,
   getMe,
   logout,
 } from "../controllers/authController.js";
-import authenticate from "../middleware/authMiddleware.js";
-import checkApproval from "../middleware/approvalMiddleware.js";
+import { authenticate, checkApproval } from "../middleware/authMiddleware.js";
+
+const router = express.Router();
 
 // Public routes
-router.post("/register/admin", registerAdmin);
-router.post("/register/artist", registerArtist);
-router.post("/register/customer", registerCustomer);
 router.post("/login", login);
 
 // Protected routes

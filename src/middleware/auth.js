@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-import Artist from "../models/artist.js";
+import Artist from "../models/Artist.js";
 import Customer from "../models/Customer.js";
 import { asyncHandler } from "./errorHandler.js";
 import { UnauthorizedError } from "../utils/errors.js";
@@ -22,7 +22,9 @@ export const verifyToken = asyncHandler(async (req, res, next) => {
 
   // Make sure token exists
   if (!token) {
-    throw new UnauthorizedError("Not authorized to access this route. No token provided.");
+    throw new UnauthorizedError(
+      "Not authorized to access this route. No token provided."
+    );
   }
 
   try {
@@ -122,7 +124,11 @@ export const verifyRole = (...roles) => {
     // Check if user's role is in allowed roles
     if (!allowedRoles.includes(req.user.role)) {
       throw new UnauthorizedError(
-        `User role '${req.user.role}' is not authorized to access this route. Required roles: ${allowedRoles.join(", ")}`
+        `User role '${
+          req.user.role
+        }' is not authorized to access this route. Required roles: ${allowedRoles.join(
+          ", "
+        )}`
       );
     }
 
@@ -173,4 +179,9 @@ export const customerOrAdmin = verifyRole("Customer", "Admin", "Super Admin");
 /**
  * Combined middleware: Any authenticated user
  */
-export const anyAuthenticated = verifyRole("Admin", "Super Admin", "Artist", "Customer");
+export const anyAuthenticated = verifyRole(
+  "Admin",
+  "Super Admin",
+  "Artist",
+  "Customer"
+);

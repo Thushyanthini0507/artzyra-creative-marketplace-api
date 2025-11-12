@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
-const customerSchema = new mongoose.Schema(
+const artistSchema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -25,21 +25,51 @@ const customerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    address: {
-      street: String,
-      city: String,
-      state: String,
-      zipCode: String,
-      country: String,
+    bio: {
+      type: String,
+      trim: true,
     },
     profileImage: {
       type: String,
       default: "",
     },
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+    },
+    skills: [
+      {
+        type: String,
+        trim: true,
+      },
+    ],
+    hourlyRate: {
+      type: Number,
+      default: 0,
+    },
+    availability: {
+      type: Map,
+      of: {
+        start: String,
+        end: String,
+        available: Boolean,
+      },
+      default: {},
+    },
+    rating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    totalReviews: {
+      type: Number,
+      default: 0,
+    },
     role: {
       type: String,
-      enum: ["customer"],
-      default: "customer",
+      enum: ["artist"],
+      default: "artist",
     },
     isApproved: {
       type: Boolean,
@@ -56,7 +86,7 @@ const customerSchema = new mongoose.Schema(
 );
 
 // Hash password before saving
-customerSchema.pre("save", async function (next) {
+artistSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next();
   }
@@ -65,8 +95,11 @@ customerSchema.pre("save", async function (next) {
 });
 
 // Compare password method
-customerSchema.methods.comparePassword = async function (candidatePassword) {
+artistSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-export default mongoose.model("Customer", customerSchema);
+// Index for search
+artistSchema.index({ name: "text", bio: "text", skills: "text" });
+
+export default mongoose.model("Artist", artistSchema);

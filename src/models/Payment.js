@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import Customer from "./Customer.js";
-import service from "./service.js";
+import service from "./Category.js";
 
 const paymentSchema = new mongoose.Schema(
   {

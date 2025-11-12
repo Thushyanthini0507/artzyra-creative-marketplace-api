@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
-const customerSchema = new mongoose.Schema(
+const adminSchema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -21,33 +21,14 @@ const customerSchema = new mongoose.Schema(
       minlength: 6,
       select: false,
     },
-    phone: {
-      type: String,
-      trim: true,
-    },
-    address: {
-      street: String,
-      city: String,
-      state: String,
-      zipCode: String,
-      country: String,
-    },
-    profileImage: {
-      type: String,
-      default: "",
-    },
     role: {
       type: String,
-      enum: ["customer"],
-      default: "customer",
+      enum: ["admin"],
+      default: "admin",
     },
     isApproved: {
       type: Boolean,
-      default: false, // Requires admin approval
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
+      default: true, // Admins are auto-approved
     },
   },
   {
@@ -56,7 +37,7 @@ const customerSchema = new mongoose.Schema(
 );
 
 // Hash password before saving
-customerSchema.pre("save", async function (next) {
+adminSchema.pre("save", async function (next) {
   if (!this.isModified("password")) {
     return next();
   }
@@ -65,8 +46,8 @@ customerSchema.pre("save", async function (next) {
 });
 
 // Compare password method
-customerSchema.methods.comparePassword = async function (candidatePassword) {
+adminSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-export default mongoose.model("Customer", customerSchema);
+export default mongoose.model("Admin", adminSchema);

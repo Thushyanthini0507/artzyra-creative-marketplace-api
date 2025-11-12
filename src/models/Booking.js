@@ -1,42 +1,73 @@
 import mongoose from "mongoose";
-import Customer from "./Customer.js";
-import artist from "./artist.js";
 
 const bookingSchema = new mongoose.Schema(
   {
-        customer_id: {
+    customer: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: Customer,
+      ref: "Customer",
       required: true,
     },
-    talent_id: {
+    artist: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: artist,
+      ref: "Artist",
       required: true,
     },
-    booking_date: {
-      type: Date,
-      default: Date.now,
-    },
-    event_date: {
-      type: Date,
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
       required: true,
     },
-    location: {
+    bookingDate: {
+      type: Date,
+      required: [true, "Please provide a booking date"],
+    },
+    startTime: {
       type: String,
+      required: [true, "Please provide a start time"],
+    },
+    endTime: {
+      type: String,
+      required: [true, "Please provide an end time"],
+    },
+    duration: {
+      type: Number, // in hours
+      required: true,
+    },
+    totalAmount: {
+      type: Number,
+      required: true,
     },
     status: {
       type: String,
-      enum: ["Booked", "Completed", "Canceled"],
-      default: "Booked",
+      enum: ["pending", "accepted", "rejected", "completed", "cancelled"],
+      default: "pending",
     },
-    payment_status: {
+    specialRequests: {
       type: String,
-      enum: ["Paid", "Pending"],
-      default: "Pending",
+      trim: true,
+    },
+    location: {
+      type: String,
+      trim: true,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "paid", "refunded"],
+      default: "pending",
+    },
+    payment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Payment",
     },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
-// Use existing "sales" collection (was previously named Sale)
-export default mongoose.model("Booking", bookingSchema, "sales");
+
+// Index for efficient queries
+bookingSchema.index({ customer: 1, status: 1 });
+bookingSchema.index({ artist: 1, status: 1 });
+bookingSchema.index({ bookingDate: 1 });
+
+export default mongoose.model("Booking", bookingSchema);

@@ -24,11 +24,22 @@ const mapRoleToModel = (role) => {
 };
 
 /**
- * Get notifications for the authenticated user with pagination
+ * Get notifications with search and filtering
  * @route GET /api/notifications
+ * Query params: search, type, isRead, startDate, endDate, page, limit, sortBy, sortOrder
  */
 export const getNotifications = asyncHandler(async (req, res) => {
-  const { isRead, page = 1, limit = 20 } = req.query;
+  const {
+    search,
+    type,
+    isRead,
+    startDate,
+    endDate,
+    page = 1,
+    limit = 20,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
 
   const userModel = mapRoleToModel(req.userRole);
 
@@ -37,22 +48,49 @@ export const getNotifications = asyncHandler(async (req, res) => {
     userModel,
   };
 
+  // Status filter
   if (isRead !== undefined) {
     query.isRead = isRead === "true";
   }
 
+  // Type filter
+  if (type) {
+    query.type = type;
+  }
+
+  // Date range filter
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) {
+      query.createdAt.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      query.createdAt.$lte = new Date(endDate);
+    }
+  }
+
+  // Search filter
+  if (search) {
+    query.$or = [
+      { title: { $regex: search, $options: "i" } },
+      { message: { $regex: search, $options: "i" } },
+    ];
+  }
+
   const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
   const limitNum = parseInt(limit, 10);
+  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
   const notifications = await Notification.find(query)
     .populate("relatedId")
     .skip(skip)
     .limit(limitNum)
-    .sort({ createdAt: -1 });
+    .sort(sort);
 
   const total = await Notification.countDocuments(query);
   const unreadCount = await Notification.countDocuments({
-    ...query,
+    user: req.userId,
+    userModel,
     isRead: false,
   });
 

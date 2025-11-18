@@ -44,7 +44,7 @@ const customerSchema = new mongoose.Schema(
     },
     isApproved: {
       type: Boolean,
-      default: false, // Requires admin approval
+      default: true, // Customers are auto-approved
     },
     isActive: {
       type: Boolean,

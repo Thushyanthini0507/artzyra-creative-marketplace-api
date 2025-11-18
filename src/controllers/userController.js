@@ -117,12 +117,12 @@ export const registerUser = asyncHandler(async (req, res) => {
     password,
     phone,
     address,
+    isApproved: true, // Customers are auto-approved
   });
 
   return res.status(201).json({
     success: true,
-    message:
-      "Customer registered successfully. Please wait for admin approval.",
+    message: "Customer registered successfully. You can now log in.",
     data: {
       user: {
         id: customer._id,
@@ -136,15 +136,92 @@ export const registerUser = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get all non-admin users
+ * Get all non-admin users with search and filtering
  * @route GET /api/users
+ * Query params: search, role, isApproved, isActive, page, limit, sortBy, sortOrder
  */
 export const getAllUsers = asyncHandler(async (req, res) => {
-  const [artists, customers] = await Promise.all([
-    Artist.find().select("-password"),
-    Customer.find().select("-password"),
-  ]);
+  const {
+    search,
+    role,
+    isApproved,
+    isActive,
+    category,
+    minRating,
+    maxHourlyRate,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
 
+  // Build artist query
+  const artistQuery = {};
+  if (search) {
+    artistQuery.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+      { bio: { $regex: search, $options: "i" } },
+      { skills: { $in: [new RegExp(search, "i")] } },
+    ];
+  }
+  if (isApproved !== undefined) {
+    artistQuery.isApproved = isApproved === "true";
+  }
+  if (isActive !== undefined) {
+    artistQuery.isActive = isActive === "true";
+  }
+  if (category) {
+    artistQuery.category = category;
+  }
+  if (minRating) {
+    artistQuery.rating = { $gte: parseFloat(minRating) };
+  }
+  if (maxHourlyRate) {
+    artistQuery.hourlyRate = { $lte: parseFloat(maxHourlyRate) };
+  }
+
+  // Build customer query
+  const customerQuery = {};
+  if (search) {
+    customerQuery.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+    ];
+  }
+  if (isApproved !== undefined) {
+    customerQuery.isApproved = isApproved === "true";
+  }
+  if (isActive !== undefined) {
+    customerQuery.isActive = isActive === "true";
+  }
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+
+  let artists = [];
+  let customers = [];
+
+  // Fetch based on role filter
+  if (!role || role === "artist") {
+    artists = await Artist.find(artistQuery)
+      .select("-password")
+      .populate("category", "name description")
+      .skip(role === "artist" ? skip : 0)
+      .limit(role === "artist" ? limitNum : 1000)
+      .sort(sort);
+  }
+
+  if (!role || role === "customer") {
+    customers = await Customer.find(customerQuery)
+      .select("-password")
+      .skip(role === "customer" ? skip : 0)
+      .limit(role === "customer" ? limitNum : 1000)
+      .sort(sort);
+  }
+
+  // Combine and format
   const users = [
     ...artists.map((artist) => ({
       ...artist.toObject(),
@@ -156,10 +233,30 @@ export const getAllUsers = asyncHandler(async (req, res) => {
     })),
   ];
 
+  // If no role filter, apply pagination to combined results
+  let paginatedUsers = users;
+  let total = users.length;
+
+  if (!role) {
+    total = users.length;
+    paginatedUsers = users.slice(skip, skip + limitNum);
+  } else {
+    total =
+      role === "artist"
+        ? await Artist.countDocuments(artistQuery)
+        : await Customer.countDocuments(customerQuery);
+  }
+
   res.json({
     success: true,
     message: "Users retrieved successfully",
-    data: users,
+    data: paginatedUsers,
+    pagination: {
+      currentPage: parseInt(page),
+      limit: limitNum,
+      totalItems: total,
+      totalPages: Math.ceil(total / limitNum),
+    },
   });
 });
 

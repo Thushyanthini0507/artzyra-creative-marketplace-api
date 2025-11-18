@@ -17,7 +17,6 @@ import {
   ForbiddenError,
 } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
-import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
  * Create payment
@@ -151,13 +150,13 @@ export const getPaymentById = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get payments by user with pagination
+ * Get payments
  * @route GET /api/payments
  */
 export const getPayments = asyncHandler(async (req, res) => {
-  const { status, page = 1, limit = 10 } = req.query;
-
   const query = {};
+
+  // Role-based filtering
   if (req.userRole === "customer") {
     query.customer = req.userId;
   } else if (req.userRole === "artist") {
@@ -166,29 +165,15 @@ export const getPayments = asyncHandler(async (req, res) => {
     throw new ForbiddenError("Unauthorized");
   }
 
-  if (status) {
-    query.status = status;
-  }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
   const payments = await Payment.find(query)
     .populate("booking", "bookingDate startTime endTime totalAmount")
     .populate("customer", "name email")
     .populate("artist", "name email")
-    .skip(skip)
-    .limit(limitNum)
     .sort({ createdAt: -1 });
-
-  const total = await Payment.countDocuments(query);
-
-  const response = formatPaginationResponse(payments, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: payments,
   });
 });
 

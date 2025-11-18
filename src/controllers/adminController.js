@@ -14,7 +14,6 @@ import { sendApprovalEmail } from "../utils/emailService.js";
 import { createNotification } from "../utils/helpers.js";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
-import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
  * Approve/Reject User
@@ -76,11 +75,12 @@ export const approveUser = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get users by role with pagination (Admin only)
+ * Get users by role (Admin only)
  * @route GET /api/admin/users
+ * Query params: role
  */
 export const getUsersByRole = asyncHandler(async (req, res) => {
-  const { role, isApproved, page = 1, limit = 10 } = req.query;
+  const { role } = req.query;
 
   if (!role) {
     throw new BadRequestError("Please specify a role (artist or customer)");
@@ -95,29 +95,14 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
     throw new BadRequestError("Invalid role. Must be artist or customer");
   }
 
-  const query = {};
-  if (isApproved !== undefined) {
-    query.isApproved = isApproved === "true";
-  }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
-  const users = await User.find(query)
+  const users = await User.find()
     .select("-password")
-    .populate("category", "name")
-    .skip(skip)
-    .limit(limitNum)
+    .populate("category", "name description")
     .sort({ createdAt: -1 });
-
-  const total = await User.countDocuments(query);
-
-  const response = formatPaginationResponse(users, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: users,
   });
 });
 
@@ -154,36 +139,19 @@ export const getUserById = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get all bookings with pagination (Admin only)
+ * Get all bookings (Admin only)
  * @route GET /api/admin/bookings
  */
 export const getAllBookings = asyncHandler(async (req, res) => {
-  const { status, page = 1, limit = 10 } = req.query;
-
-  const query = {};
-  if (status) {
-    query.status = status;
-  }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
-  const bookings = await Booking.find(query)
+  const bookings = await Booking.find()
     .populate("customer", "name email phone")
     .populate("artist", "name email phone profileImage rating")
     .populate("category", "name description")
-    .skip(skip)
-    .limit(limitNum)
     .sort({ createdAt: -1 });
-
-  const total = await Booking.countDocuments(query);
-
-  const response = formatPaginationResponse(bookings, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: bookings,
   });
 });
 

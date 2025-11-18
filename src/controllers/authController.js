@@ -53,8 +53,8 @@ export const login = asyncHandler(async (req, res) => {
     throw new UnauthorizedError("Invalid email or password");
   }
 
-  // Check if user is approved (admins are always approved)
-  if (userRole !== "admin" && !user.isApproved) {
+  // Check if user is approved (admins and customers are always approved)
+  if (userRole !== "admin" && userRole !== "customer" && !user.isApproved) {
     throw new UnauthorizedError(
       "Your account is pending approval. Please wait for admin approval."
     );

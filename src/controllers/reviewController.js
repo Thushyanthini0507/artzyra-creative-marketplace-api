@@ -13,7 +13,6 @@ import {
   ForbiddenError,
 } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
-import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
  * Create review
@@ -101,34 +100,23 @@ export const createReview = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get reviews by artist with pagination
+ * Get reviews by artist
  * @route GET /api/reviews/artist/:artistId
  */
 export const getReviewsByArtist = asyncHandler(async (req, res) => {
   const { artistId } = req.params;
-  const { page = 1, limit = 10 } = req.query;
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
-  const reviews = await Review.find({ artist: artistId, isVisible: true })
-    .populate("customer", "name profileImage")
-    .populate("booking", "bookingDate startTime endTime")
-    .skip(skip)
-    .limit(limitNum)
-    .sort({ createdAt: -1 });
-
-  const total = await Review.countDocuments({
+  const reviews = await Review.find({
     artist: artistId,
     isVisible: true,
-  });
-
-  const response = formatPaginationResponse(reviews, total, page, limit);
+  })
+    .populate("customer", "name profileImage")
+    .populate("booking", "bookingDate startTime endTime")
+    .sort({ createdAt: -1 });
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: reviews,
   });
 });
 

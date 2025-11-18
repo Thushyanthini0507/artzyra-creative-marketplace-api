@@ -6,43 +6,18 @@ import Category from "../models/Category.js";
 import Artist from "../models/Artist.js";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
-import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
- * Get all categories with pagination
+ * Get all categories
  * @route GET /api/categories
  */
 export const getAllCategories = asyncHandler(async (req, res) => {
-  const { search, isActive, page = 1, limit = 10 } = req.query;
-
-  const query = {};
-  if (isActive !== undefined) {
-    query.isActive = isActive === "true";
-  }
-
-  if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { description: { $regex: search, $options: "i" } },
-    ];
-  }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
-  const categories = await Category.find(query)
-    .skip(skip)
-    .limit(limitNum)
+  const categories = await Category.find()
     .sort({ name: 1 });
-
-  const total = await Category.countDocuments(query);
-
-  const response = formatPaginationResponse(categories, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: categories,
   });
 });
 
@@ -154,53 +129,24 @@ export const deleteCategory = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get artists by category with pagination
+ * Get artists by category
  * @route GET /api/categories/:categoryId/artists
  */
 export const getArtistsByCategory = asyncHandler(async (req, res) => {
   const { categoryId } = req.params;
-  const { search, minRating, maxRate, page = 1, limit = 10 } = req.query;
 
-  const query = {
+  const artists = await Artist.find({
     category: categoryId,
     isApproved: true,
     isActive: true,
-  };
-
-  if (minRating) {
-    query.rating = { $gte: parseFloat(minRating) };
-  }
-
-  if (maxRate) {
-    query.hourlyRate = { $lte: parseFloat(maxRate) };
-  }
-
-  if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { bio: { $regex: search, $options: "i" } },
-      { skills: { $in: [new RegExp(search, "i")] } },
-    ];
-  }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
-  const artists = await Artist.find(query)
+  })
     .select("-password")
     .populate("category", "name description image")
-    .skip(skip)
-    .limit(limitNum)
     .sort({ rating: -1, createdAt: -1 });
-
-  const total = await Artist.countDocuments(query);
-
-  const response = formatPaginationResponse(artists, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: artists,
   });
 });
 

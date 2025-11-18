@@ -98,12 +98,12 @@ export const checkApproval = asyncHandler(async (req, res, next) => {
     throw new UnauthorizedError("Not authorized. Please log in.");
   }
 
-  // Admins are always approved
-  if (req.userRole === "admin") {
+  // Admins and customers are always approved (customers are auto-approved)
+  if (req.userRole === "admin" || req.userRole === "customer") {
     return next();
   }
 
-  // Check if user is approved
+  // Check if user is approved (for artists)
   if (!req.user.isApproved) {
     throw new ForbiddenError(
       "Your account is pending approval. Please wait for admin approval."

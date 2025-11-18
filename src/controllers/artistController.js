@@ -14,7 +14,6 @@ import {
   ForbiddenError,
 } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
-import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
  * Get artist profile
@@ -84,35 +83,18 @@ export const updateProfile = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get artist bookings with pagination
+ * Get artist bookings
  * @route GET /api/artist/bookings
  */
 export const getBookings = asyncHandler(async (req, res) => {
-  const { status, page = 1, limit = 10 } = req.query;
-
-  const query = { artist: req.userId };
-  if (status) {
-    query.status = status;
-  }
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
-  const bookings = await Booking.find(query)
+  const bookings = await Booking.find({ artist: req.userId })
     .populate("customer", "name email phone profileImage")
     .populate("category", "name description")
-    .skip(skip)
-    .limit(limitNum)
     .sort({ bookingDate: -1 });
-
-  const total = await Booking.countDocuments(query);
-
-  const response = formatPaginationResponse(bookings, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: bookings,
   });
 });
 
@@ -267,36 +249,21 @@ export const checkAvailability = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get artist reviews with pagination
+ * Get artist reviews
  * @route GET /api/artist/reviews
  */
 export const getReviews = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10 } = req.query;
-
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-
   const reviews = await Review.find({
     artist: req.userId,
     isVisible: true,
   })
     .populate("customer", "name profileImage")
     .populate("booking", "bookingDate startTime endTime")
-    .skip(skip)
-    .limit(limitNum)
     .sort({ createdAt: -1 });
-
-  const total = await Review.countDocuments({
-    artist: req.userId,
-    isVisible: true,
-  });
-
-  const response = formatPaginationResponse(reviews, total, page, limit);
 
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    data: reviews,
   });
 });
 

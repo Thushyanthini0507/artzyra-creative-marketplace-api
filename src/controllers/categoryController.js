@@ -6,18 +6,58 @@ import Category from "../models/Category.js";
 import Artist from "../models/Artist.js";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
- * Get all categories
+ * Get all categories with search and filtering
  * @route GET /api/categories
+ * Query params: search, isActive, page, limit
+ * 
+ * EXPLANATION:
+ * - search: Searches in name and description fields (case-insensitive)
+ * - isActive: Filter by active status (true/false)
+ * - page, limit: Pagination parameters
  */
 export const getAllCategories = asyncHandler(async (req, res) => {
-  const categories = await Category.find()
-    .sort({ name: 1 });
+  const { search, isActive, page = 1, limit = 10 } = req.query;
+
+  const query = {};
+
+  // ACTIVE STATUS FILTER
+  // Filter by whether category is active
+  // Example: ?isActive=true
+  if (isActive !== undefined) {
+    query.isActive = isActive === "true";
+  }
+
+  // SEARCH FILTER
+  // Searches in category name and description
+  // Uses $or to match either field
+  // Example: ?search=photography
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  // PAGINATION
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+
+  const categories = await Category.find(query)
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ name: 1 }); // Sort alphabetically by name
+
+  const total = await Category.countDocuments(query);
+
+  const response = formatPaginationResponse(categories, total, page, limit);
 
   res.json({
     success: true,
-    data: categories,
+    data: response.data,
+    pagination: response.pagination,
   });
 });
 
@@ -129,24 +169,71 @@ export const deleteCategory = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get artists by category
+ * Get artists by category with search and filtering
  * @route GET /api/categories/:categoryId/artists
+ * Query params: search, minRating, maxRate, page, limit
+ * 
+ * EXPLANATION:
+ * - search: Searches in name, bio, and skills fields
+ * - minRating: Minimum rating filter (0-5)
+ * - maxRate: Maximum hourly rate filter
+ * - Returns only approved and active artists in the category
  */
 export const getArtistsByCategory = asyncHandler(async (req, res) => {
   const { categoryId } = req.params;
+  const { search, minRating, maxRate, page = 1, limit = 10 } = req.query;
 
-  const artists = await Artist.find({
+  // Base query - only approved and active artists in this category
+  const query = {
     category: categoryId,
     isApproved: true,
     isActive: true,
-  })
+  };
+
+  // RATING FILTER
+  // Filter artists by minimum rating
+  // Example: ?minRating=4 (only 4+ star artists)
+  if (minRating) {
+    query.rating = { $gte: parseFloat(minRating) };
+  }
+
+  // PRICE FILTER
+  // Filter artists by maximum hourly rate
+  // Example: ?maxRate=100 (artists charging $100/hour or less)
+  if (maxRate) {
+    query.hourlyRate = { $lte: parseFloat(maxRate) };
+  }
+
+  // SEARCH FILTER
+  // Searches in name, bio, and skills array
+  // Example: ?search=photography
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { bio: { $regex: search, $options: "i" } },
+      { skills: { $in: [new RegExp(search, "i")] } },
+    ];
+  }
+
+  // PAGINATION
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+
+  const artists = await Artist.find(query)
     .select("-password")
     .populate("category", "name description image")
-    .sort({ rating: -1, createdAt: -1 });
+    .skip(skip)
+    .limit(limitNum)
+    .sort({ rating: -1, createdAt: -1 }); // Sort by rating first, then creation date
+
+  const total = await Artist.countDocuments(query);
+
+  const response = formatPaginationResponse(artists, total, page, limit);
 
   res.json({
     success: true,
-    data: artists,
+    data: response.data,
+    pagination: response.pagination,
   });
 });
 

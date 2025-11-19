@@ -14,6 +14,7 @@ import {
   ForbiddenError,
 } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
  * Get artist profile
@@ -83,18 +84,93 @@ export const updateProfile = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get artist bookings
+ * Get artist bookings with search and filtering
  * @route GET /api/artist/bookings
+ * Query params: search, status, paymentStatus, category, startDate, endDate, minAmount, maxAmount, page, limit, sortBy, sortOrder
+ * 
+ * EXPLANATION:
+ * Same filtering logic as customer bookings but filtered by artist ID instead of customer ID
  */
 export const getBookings = asyncHandler(async (req, res) => {
-  const bookings = await Booking.find({ artist: req.userId })
+  const {
+    search,
+    status,
+    paymentStatus,
+    category,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    page = 1,
+    limit = 10,
+    sortBy = "bookingDate",
+    sortOrder = "desc",
+  } = req.query;
+
+  // Base query - only get bookings for this artist
+  const query = { artist: req.userId };
+
+  // STATUS FILTERS
+  if (status) {
+    query.status = status;
+  }
+  if (paymentStatus) {
+    query.paymentStatus = paymentStatus;
+  }
+  if (category) {
+    query.category = category;
+  }
+
+  // DATE RANGE FILTER
+  if (startDate || endDate) {
+    query.bookingDate = {};
+    if (startDate) {
+      query.bookingDate.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      query.bookingDate.$lte = new Date(endDate);
+    }
+  }
+
+  // AMOUNT RANGE FILTER
+  if (minAmount || maxAmount) {
+    query.totalAmount = {};
+    if (minAmount) {
+      query.totalAmount.$gte = parseFloat(minAmount);
+    }
+    if (maxAmount) {
+      query.totalAmount.$lte = parseFloat(maxAmount);
+    }
+  }
+
+  // SEARCH FILTER
+  if (search) {
+    query.$or = [
+      { location: { $regex: search, $options: "i" } },
+      { specialRequests: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  // PAGINATION AND SORTING
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+
+  const bookings = await Booking.find(query)
     .populate("customer", "name email phone profileImage")
     .populate("category", "name description")
-    .sort({ bookingDate: -1 });
+    .skip(skip)
+    .limit(limitNum)
+    .sort(sort);
+
+  const total = await Booking.countDocuments(query);
+
+  const response = formatPaginationResponse(bookings, total, page, limit);
 
   res.json({
     success: true,
-    data: bookings,
+    data: response.data,
+    pagination: response.pagination,
   });
 });
 
@@ -249,21 +325,79 @@ export const checkAvailability = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get artist reviews
+ * Get artist reviews with search and filtering
  * @route GET /api/artist/reviews
+ * Query params: search, minRating, maxRating, startDate, endDate, page, limit, sortBy, sortOrder
+ * 
+ * EXPLANATION:
+ * Filters reviews for the logged-in artist with rating and date range filters
  */
 export const getReviews = asyncHandler(async (req, res) => {
-  const reviews = await Review.find({
+  const {
+    search,
+    minRating,
+    maxRating,
+    startDate,
+    endDate,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  // Base query - only visible reviews for this artist
+  const query = {
     artist: req.userId,
     isVisible: true,
-  })
+  };
+
+  // RATING RANGE FILTER
+  if (minRating || maxRating) {
+    query.rating = {};
+    if (minRating) {
+      query.rating.$gte = parseInt(minRating);
+    }
+    if (maxRating) {
+      query.rating.$lte = parseInt(maxRating);
+    }
+  }
+
+  // DATE RANGE FILTER
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) {
+      query.createdAt.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      query.createdAt.$lte = new Date(endDate);
+    }
+  }
+
+  // SEARCH FILTER
+  if (search) {
+    query.comment = { $regex: search, $options: "i" };
+  }
+
+  // PAGINATION AND SORTING
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+
+  const reviews = await Review.find(query)
     .populate("customer", "name profileImage")
     .populate("booking", "bookingDate startTime endTime")
-    .sort({ createdAt: -1 });
+    .skip(skip)
+    .limit(limitNum)
+    .sort(sort);
+
+  const total = await Review.countDocuments(query);
+
+  const response = formatPaginationResponse(reviews, total, page, limit);
 
   res.json({
     success: true,
-    data: reviews,
+    data: response.data,
+    pagination: response.pagination,
   });
 });
 

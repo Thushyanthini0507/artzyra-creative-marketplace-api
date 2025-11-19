@@ -17,6 +17,7 @@ import {
   ForbiddenError,
 } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
+import { formatPaginationResponse } from "../utils/paginate.js";
 
 /**
  * Create payment
@@ -150,13 +151,44 @@ export const getPaymentById = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get payments
+ * Get payments with search and filtering
  * @route GET /api/payments
+ * Query params: search, status, paymentMethod, customer, artist, booking, startDate, endDate, minAmount, maxAmount, page, limit, sortBy, sortOrder
+ * 
+ * EXPLANATION:
+ * - Role-based: Customers/artists see only their payments, admins see all
+ * - search: Searches in transactionId field
+ * - status: Payment status (pending, completed, refunded)
+ * - paymentMethod: Filter by payment method
+ * - customer/artist: Admin can filter by specific users
+ * - booking: Filter by booking ID
+ * - startDate/endDate: Date range filter for paymentDate
+ * - minAmount/maxAmount: Amount range filter
  */
 export const getPayments = asyncHandler(async (req, res) => {
+  const {
+    search,
+    status,
+    paymentMethod,
+    customer,
+    artist,
+    booking,
+    startDate,
+    endDate,
+    minAmount,
+    maxAmount,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
   const query = {};
 
-  // Role-based filtering
+  // ROLE-BASED FILTERING (Security)
+  // Customers can only see their own payments
+  // Artists can only see payments for their services
+  // Admins can see all payments
   if (req.userRole === "customer") {
     query.customer = req.userId;
   } else if (req.userRole === "artist") {
@@ -165,15 +197,77 @@ export const getPayments = asyncHandler(async (req, res) => {
     throw new ForbiddenError("Unauthorized");
   }
 
+  // ADMIN-SPECIFIC FILTERS
+  // Only admins can filter by customer/artist
+  if (req.userRole === "admin") {
+    if (customer) {
+      query.customer = customer;
+    }
+    if (artist) {
+      query.artist = artist;
+    }
+  }
+
+  // STATUS AND METHOD FILTERS
+  if (status) {
+    query.status = status;
+  }
+  if (paymentMethod) {
+    query.paymentMethod = paymentMethod;
+  }
+  if (booking) {
+    query.booking = booking;
+  }
+
+  // DATE RANGE FILTER
+  if (startDate || endDate) {
+    query.paymentDate = {};
+    if (startDate) {
+      query.paymentDate.$gte = new Date(startDate);
+    }
+    if (endDate) {
+      query.paymentDate.$lte = new Date(endDate);
+    }
+  }
+
+  // AMOUNT RANGE FILTER
+  if (minAmount || maxAmount) {
+    query.amount = {};
+    if (minAmount) {
+      query.amount.$gte = parseFloat(minAmount);
+    }
+    if (maxAmount) {
+      query.amount.$lte = parseFloat(maxAmount);
+    }
+  }
+
+  // SEARCH FILTER
+  // Searches in transactionId field
+  if (search) {
+    query.transactionId = { $regex: search, $options: "i" };
+  }
+
+  // PAGINATION AND SORTING
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+
   const payments = await Payment.find(query)
     .populate("booking", "bookingDate startTime endTime totalAmount")
     .populate("customer", "name email")
     .populate("artist", "name email")
-    .sort({ createdAt: -1 });
+    .skip(skip)
+    .limit(limitNum)
+    .sort(sort);
+
+  const total = await Payment.countDocuments(query);
+
+  const response = formatPaginationResponse(payments, total, page, limit);
 
   res.json({
     success: true,
-    data: payments,
+    data: response.data,
+    pagination: response.pagination,
   });
 });
 

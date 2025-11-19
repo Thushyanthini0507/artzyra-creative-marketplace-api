@@ -5,12 +5,14 @@ A comprehensive RESTful API for an artist booking platform that connects custome
 ## 🚀 Features
 
 - **User Management**
+
   - Customer registration and login (auto-approved)
   - Artist registration (requires admin approval)
   - Admin account management
   - Role-based access control (Customer, Artist, Admin)
 
 - **Artist Services**
+
   - Browse approved artists
   - Search artists by name, bio, skills
   - Filter by category
@@ -18,26 +20,31 @@ A comprehensive RESTful API for an artist booking platform that connects custome
   - Artist availability management
 
 - **Booking System**
+
   - Create bookings with date/time selection
   - Automatic conflict detection
   - Booking status management (pending, accepted, rejected, completed, cancelled)
   - Amount calculation based on hourly rates
 
 - **Payment Processing**
+
   - Payment creation and tracking
   - Payment status management
   - Refund processing (admin only)
 
 - **Reviews & Ratings**
+
   - Leave reviews for completed bookings
   - Rating system (1-5 stars)
   - Automatic artist rating calculation
 
 - **Categories**
+
   - Service category management
   - Category-based artist filtering
 
 - **Notifications**
+
   - Real-time notifications for bookings, payments, reviews
   - Notification management
 
@@ -71,23 +78,27 @@ A comprehensive RESTful API for an artist booking platform that connects custome
 ## 🔧 Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd artzyra-api
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Create environment file**
+
    ```bash
    cp .env.example .env
    ```
 
 4. **Configure environment variables**
    Edit `.env` file with your configuration:
+
    ```env
    PORT=8000
    MONGO_URI=mongodb://localhost:27017/artzyra
@@ -97,15 +108,19 @@ A comprehensive RESTful API for an artist booking platform that connects custome
    ```
 
 5. **Seed the database (optional)**
+
    ```bash
    npm run seed
    ```
+
    This will create:
+
    - Default admin account (email: `admin12@gmail.com`, password: `admin123`)
    - Sample categories
    - Sample customers and artists
 
 6. **Start the server**
+
    ```bash
    # Development mode (with nodemon)
    npm run dev
@@ -120,97 +135,97 @@ The server will start on `http://localhost:8000` (or the port specified in your 
 
 ### Authentication
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/auth/login` | Login user | No |
-| POST | `/api/users/register` | Register new user | No |
-| GET | `/api/auth/me` | Get current user | Yes |
-| POST | `/api/auth/logout` | Logout user | Yes |
+| Method | Endpoint              | Description       | Auth Required |
+| ------ | --------------------- | ----------------- | ------------- |
+| POST   | `/api/auth/login`     | Login user        | No            |
+| POST   | `/api/users/register` | Register new user | No            |
+| GET    | `/api/auth/me`        | Get current user  | Yes           |
+| POST   | `/api/auth/logout`    | Logout user       | Yes           |
 
 ### Artists (Public)
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/artists` | Get all approved artists | No |
-| GET | `/api/artists/:id` | Get artist by ID | No |
+| Method | Endpoint           | Description              | Auth Required |
+| ------ | ------------------ | ------------------------ | ------------- |
+| GET    | `/api/artists`     | Get all approved artists | No            |
+| GET    | `/api/artists/:id` | Get artist by ID         | No            |
 
 ### Bookings
 
-| Method | Endpoint | Description | Auth Required | Role |
-|--------|----------|-------------|---------------|------|
-| POST | `/api/bookings` | Create booking | Yes | Customer |
-| GET | `/api/bookings/:id` | Get booking by ID | Yes | Customer/Artist/Admin |
-| PUT | `/api/bookings/:id/cancel` | Cancel booking | Yes | Customer |
-| PUT | `/api/bookings/:id/complete` | Complete booking | Yes | Artist |
+| Method | Endpoint                     | Description       | Auth Required | Role                  |
+| ------ | ---------------------------- | ----------------- | ------------- | --------------------- |
+| POST   | `/api/bookings`              | Create booking    | Yes           | Customer              |
+| GET    | `/api/bookings/:id`          | Get booking by ID | Yes           | Customer/Artist/Admin |
+| PUT    | `/api/bookings/:id/cancel`   | Cancel booking    | Yes           | Customer              |
+| PUT    | `/api/bookings/:id/complete` | Complete booking  | Yes           | Artist                |
 
 ### Customer
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/customer/profile` | Get customer profile | Yes |
-| PUT | `/api/customer/profile` | Update customer profile | Yes |
-| GET | `/api/customer/bookings` | Get customer bookings | Yes |
-| GET | `/api/customer/reviews` | Get customer reviews | Yes |
+| Method | Endpoint                 | Description             | Auth Required |
+| ------ | ------------------------ | ----------------------- | ------------- |
+| GET    | `/api/customer/profile`  | Get customer profile    | Yes           |
+| PUT    | `/api/customer/profile`  | Update customer profile | Yes           |
+| GET    | `/api/customer/bookings` | Get customer bookings   | Yes           |
+| GET    | `/api/customer/reviews`  | Get customer reviews    | Yes           |
 
 ### Artist (Authenticated)
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/artist/profile` | Get artist profile | Yes |
-| PUT | `/api/artist/profile` | Update artist profile | Yes |
-| GET | `/api/artist/bookings` | Get artist bookings | Yes |
-| PUT | `/api/artist/bookings/:id/accept` | Accept booking | Yes |
-| PUT | `/api/artist/bookings/:id/reject` | Reject booking | Yes |
-| GET | `/api/artist/reviews` | Get artist reviews | Yes |
-| GET | `/api/artist/availability` | Check availability | Yes |
+| Method | Endpoint                          | Description           | Auth Required |
+| ------ | --------------------------------- | --------------------- | ------------- |
+| GET    | `/api/artist/profile`             | Get artist profile    | Yes           |
+| PUT    | `/api/artist/profile`             | Update artist profile | Yes           |
+| GET    | `/api/artist/bookings`            | Get artist bookings   | Yes           |
+| PUT    | `/api/artist/bookings/:id/accept` | Accept booking        | Yes           |
+| PUT    | `/api/artist/bookings/:id/reject` | Reject booking        | Yes           |
+| GET    | `/api/artist/reviews`             | Get artist reviews    | Yes           |
+| GET    | `/api/artist/availability`        | Check availability    | Yes           |
 
 ### Admin
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| PUT | `/api/admin/users/approve` | Approve/reject user | Yes |
-| GET | `/api/admin/users` | Get users by role | Yes |
-| GET | `/api/admin/users/:role/:userId` | Get user by ID | Yes |
-| GET | `/api/admin/bookings` | Get all bookings | Yes |
-| GET | `/api/admin/dashboard/stats` | Get dashboard statistics | Yes |
+| Method | Endpoint                         | Description              | Auth Required |
+| ------ | -------------------------------- | ------------------------ | ------------- |
+| PUT    | `/api/admin/users/approve`       | Approve/reject user      | Yes           |
+| GET    | `/api/admin/users`               | Get users by role        | Yes           |
+| GET    | `/api/admin/users/:role/:userId` | Get user by ID           | Yes           |
+| GET    | `/api/admin/bookings`            | Get all bookings         | Yes           |
+| GET    | `/api/admin/dashboard/stats`     | Get dashboard statistics | Yes           |
 
 ### Categories
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/categories` | Get all categories | No |
-| GET | `/api/categories/:id` | Get category by ID | No |
-| POST | `/api/categories` | Create category | Yes (Admin) |
-| PUT | `/api/categories/:id` | Update category | Yes (Admin) |
-| DELETE | `/api/categories/:id` | Delete category | Yes (Admin) |
+| Method | Endpoint              | Description        | Auth Required |
+| ------ | --------------------- | ------------------ | ------------- |
+| GET    | `/api/categories`     | Get all categories | No            |
+| GET    | `/api/categories/:id` | Get category by ID | No            |
+| POST   | `/api/categories`     | Create category    | Yes (Admin)   |
+| PUT    | `/api/categories/:id` | Update category    | Yes (Admin)   |
+| DELETE | `/api/categories/:id` | Delete category    | Yes (Admin)   |
 
 ### Payments
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/payments` | Create payment | Yes |
-| GET | `/api/payments` | Get payments | Yes |
-| GET | `/api/payments/:id` | Get payment by ID | Yes |
-| POST | `/api/payments/:id/refund` | Refund payment | Yes (Admin) |
+| Method | Endpoint                   | Description       | Auth Required |
+| ------ | -------------------------- | ----------------- | ------------- |
+| POST   | `/api/payments`            | Create payment    | Yes           |
+| GET    | `/api/payments`            | Get payments      | Yes           |
+| GET    | `/api/payments/:id`        | Get payment by ID | Yes           |
+| POST   | `/api/payments/:id/refund` | Refund payment    | Yes (Admin)   |
 
 ### Reviews
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/reviews` | Create review | Yes |
-| GET | `/api/reviews/artist/:artistId` | Get reviews by artist | No |
-| GET | `/api/reviews/:id` | Get review by ID | No |
-| PUT | `/api/reviews/:id` | Update review | Yes |
-| DELETE | `/api/reviews/:id` | Delete review | Yes |
+| Method | Endpoint                        | Description           | Auth Required |
+| ------ | ------------------------------- | --------------------- | ------------- |
+| POST   | `/api/reviews`                  | Create review         | Yes           |
+| GET    | `/api/reviews/artist/:artistId` | Get reviews by artist | No            |
+| GET    | `/api/reviews/:id`              | Get review by ID      | No            |
+| PUT    | `/api/reviews/:id`              | Update review         | Yes           |
+| DELETE | `/api/reviews/:id`              | Delete review         | Yes           |
 
 ### Notifications
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| GET | `/api/notifications` | Get notifications | Yes |
-| PUT | `/api/notifications/:id/read` | Mark as read | Yes |
-| PUT | `/api/notifications/read-all` | Mark all as read | Yes |
-| DELETE | `/api/notifications/:id` | Delete notification | Yes |
+| Method | Endpoint                      | Description         | Auth Required |
+| ------ | ----------------------------- | ------------------- | ------------- |
+| GET    | `/api/notifications`          | Get notifications   | Yes           |
+| PUT    | `/api/notifications/:id/read` | Mark as read        | Yes           |
+| PUT    | `/api/notifications/read-all` | Mark all as read    | Yes           |
+| DELETE | `/api/notifications/:id`      | Delete notification | Yes           |
 
 ## 🔐 Authentication
 
@@ -223,6 +238,7 @@ Authorization: Bearer <your-jwt-token>
 ### Default Admin Credentials
 
 After running the seed script:
+
 - **Email:** `admin12@gmail.com`
 - **Password:** `admin123`
 
@@ -477,20 +493,24 @@ EMAIL_PASS=your-app-password
 ## 🎯 Key Features Explained
 
 ### Customer Auto-Approval
+
 - Customers are automatically approved upon registration
 - No admin approval required for customer accounts
 - Customers can immediately access the platform
 
 ### Artist Approval
+
 - Artists require admin approval before they can be booked
 - Admin can approve/reject artist accounts via `/api/admin/users/approve`
 
 ### Booking System
+
 - Automatic conflict detection
 - Amount calculation based on hourly rate and duration
 - Status workflow: pending → accepted/rejected → completed/cancelled
 
 ### Search & Filtering
+
 - Case-insensitive search across multiple fields
 - Date range filtering
 - Amount range filtering
@@ -500,22 +520,26 @@ EMAIL_PASS=your-app-password
 ## 🐛 Troubleshooting
 
 ### MongoDB Connection Error
+
 - Ensure MongoDB is running
 - Check `MONGO_URI` in `.env` file
 - Verify network connectivity
 
 ### Authentication Errors
+
 - Verify JWT token is included in Authorization header
 - Check token expiration
 - Ensure user role matches endpoint requirements
 
 ### Port Already in Use
+
 - Change `PORT` in `.env` file
 - Or kill the process using the port:
+
   ```bash
   # Linux/Mac
   lsof -ti:8000 | xargs kill
-  
+
   # Windows
   netstat -ano | findstr :8000
   taskkill /PID <PID> /F
@@ -563,6 +587,3 @@ For support, email your-email@example.com or open an issue in the repository.
 ---
 
 **Made with ❤️ for connecting artists and customers**
-
-
-

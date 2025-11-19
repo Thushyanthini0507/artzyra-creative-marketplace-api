@@ -5,6 +5,7 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import connectDB from "../config/db.js";
+import User from "../models/User.js";
 import Admin from "../models/Admin.js";
 import Category from "../models/Category.js";
 import Customer from "../models/Customer.js";
@@ -28,21 +29,64 @@ const adminData = {
 
 const categoryData = [
   {
-    name: "Wedding Photography",
+    name: "DJ",
     description:
-      "Capture unforgettable wedding moments with expert photographers.",
-    image: "https://example.com/images/wedding-photography.jpg",
+      "Professional DJs skilled in mixing music, creating playlists, and entertaining crowds.",
+    image: "https://example.com/images/dj.jpg",
   },
   {
-    name: "Live Music",
-    description: "Live bands and solo artists for any special occasion.",
-    image: "https://example.com/images/live-music.jpg",
+    name: "Painters",
+    description:
+      "Talented painters and artists specializing in portraits, murals, and custom artwork.",
+    image: "https://example.com/images/painters.jpg",
   },
   {
-    name: "Event Planning",
+    name: "Guitarist",
     description:
-      "Professional planners to execute flawless events from start to finish.",
-    image: "https://example.com/images/event-planning.jpg",
+      "Skilled guitarists proficient in acoustic, electric, and classical guitar performances.",
+    image: "https://example.com/images/guitarist.jpg",
+  },
+  {
+    name: "Speakers",
+    description:
+      "Professional public speakers, motivational speakers, and event hosts.",
+    image: "https://example.com/images/speakers.jpg",
+  },
+  {
+    name: "Photographer",
+    description:
+      "Expert photographers specializing in portraits, events, and commercial photography.",
+    image: "https://example.com/images/photographer.jpg",
+  },
+  {
+    name: "Dancer",
+    description:
+      "Professional dancers and choreographers for performances and entertainment.",
+    image: "https://example.com/images/dancer.jpg",
+  },
+  {
+    name: "Singer",
+    description:
+      "Talented vocalists and singers for live performances and recording sessions.",
+    image: "https://example.com/images/singer.jpg",
+  },
+  {
+    name: "Drummer",
+    description:
+      "Skilled drummers and percussionists for bands and musical performances.",
+    image: "https://example.com/images/drummer.jpg",
+  },
+  {
+    name: "Pianist",
+    description:
+      "Professional pianists and keyboardists for concerts, events, and recordings.",
+    image: "https://example.com/images/pianist.jpg",
+  },
+  {
+    name: "Violinist",
+    description:
+      "Expert violinists and string musicians for classical and contemporary performances.",
+    image: "https://example.com/images/violinist.jpg",
   },
 ];
 
@@ -83,8 +127,8 @@ const artistData = [
     email: "sophia.lens@example.com",
     password: "artist123",
     phone: "+1234567893",
-    bio: "Award-winning wedding photographer with a passion for storytelling.",
-    categoryName: "Wedding Photography",
+    bio: "Award-winning photographer with a passion for storytelling and capturing moments.",
+    categoryName: "Photographer",
     skills: ["Photography", "Photo Editing", "Lighting"],
     hourlyRate: 150,
     isApproved: true,
@@ -94,9 +138,9 @@ const artistData = [
     email: "rhythm.collective@example.com",
     password: "artist123",
     phone: "+1234567894",
-    bio: "Energetic live band specializing in weddings and corporate events.",
-    categoryName: "Live Music",
-    skills: ["Vocals", "Guitar", "Drums"],
+    bio: "Energetic guitarist specializing in live performances and events.",
+    categoryName: "Guitarist",
+    skills: ["Acoustic Guitar", "Electric Guitar", "Live Performance"],
     hourlyRate: 200,
     isApproved: false,
   },
@@ -107,7 +151,7 @@ const bookingsData = [
     reference: "booking_completed",
     customerEmail: "john.doe@example.com",
     artistEmail: "sophia.lens@example.com",
-    categoryName: "Wedding Photography",
+    categoryName: "Photographer",
     bookingDate: new Date("2024-01-15T14:00:00Z"),
     startTime: "14:00",
     endTime: "18:00",
@@ -122,7 +166,7 @@ const bookingsData = [
     reference: "booking_pending",
     customerEmail: "priya.kumar@example.com",
     artistEmail: "rhythm.collective@example.com",
-    categoryName: "Live Music",
+    categoryName: "Guitarist",
     bookingDate: new Date("2024-02-10T19:00:00Z"),
     startTime: "19:00",
     endTime: "22:00",
@@ -183,13 +227,41 @@ const seedDatabase = async () => {
     await connectDB();
     console.log("✓ MongoDB connected successfully\n");
 
-    // Seed admin
-    let admin = await Admin.findOne({ email: adminData.email });
-    if (!admin) {
-      admin = await Admin.create(adminData);
-      console.log(`✓ Admin seeded: ${admin.email}`);
+    // Seed admin - New architecture: Create User first, then Admin profile
+    let adminUser = await User.findOne({
+      email: adminData.email,
+      role: "admin",
+    });
+    let admin = null;
+
+    if (!adminUser) {
+      // Step 1: Create user in Users collection
+      adminUser = await User.create({
+        name: adminData.name,
+        email: adminData.email,
+        password: adminData.password, // Will be hashed by pre-save hook
+        role: "admin",
+        isApproved: true, // Admins are auto-approved
+        isActive: true,
+      });
+
+      // Step 2: Create Admin profile
+      admin = await Admin.create({
+        userId: adminUser._id,
+        permissions: [],
+        isApproved: true,
+      });
+
+      // Step 3: Link User to Admin profile
+      adminUser.profileRef = admin._id;
+      adminUser.profileType = "Admin";
+      await adminUser.save();
+
+      console.log(`✓ Admin seeded: ${adminUser.email}`);
     } else {
-      console.log(`ℹ️  Admin already exists: ${admin.email}`);
+      // Admin user exists, fetch the profile
+      admin = await Admin.findOne({ userId: adminUser._id });
+      console.log(`ℹ️  Admin already exists: ${adminUser.email}`);
     }
 
     // Seed categories
@@ -206,50 +278,104 @@ const seedDatabase = async () => {
       console.log(`✓ Category created: ${category.name}`);
     }
 
-    // Seed customers
+    // Seed customers - New architecture: Create User first, then Customer profile
     const customerMap = new Map();
-    for (const customer of customerData) {
-      const existing = await Customer.findOne({ email: customer.email });
-      if (existing) {
-        customerMap.set(customer.email, existing);
-        console.log(`ℹ️  Customer exists, skipping: ${customer.email}`);
-        continue;
+    for (const customerDataItem of customerData) {
+      let customerUser = await User.findOne({
+        email: customerDataItem.email,
+        role: "customer",
+      });
+      let customer = null;
+
+      if (!customerUser) {
+        // Step 1: Create user in Users collection
+        customerUser = await User.create({
+          name: customerDataItem.name,
+          email: customerDataItem.email,
+          password: customerDataItem.password, // Will be hashed by pre-save hook
+          phone: customerDataItem.phone,
+          role: "customer",
+          isApproved: true, // Customers are auto-approved
+          isActive: true,
+        });
+
+        // Step 2: Create Customer profile
+        customer = await Customer.create({
+          userId: customerUser._id,
+          address: customerDataItem.address,
+          isApproved: true,
+          isActive: true,
+        });
+
+        // Step 3: Link User to Customer profile
+        customerUser.profileRef = customer._id;
+        customerUser.profileType = "Customer";
+        await customerUser.save();
+
+        customerMap.set(customerDataItem.email, customer);
+        console.log(`✓ Customer created: ${customerUser.email}`);
+      } else {
+        // Customer user exists, fetch the profile
+        customer = await Customer.findOne({ userId: customerUser._id });
+        customerMap.set(customerDataItem.email, customer);
+        console.log(`ℹ️  Customer exists, skipping: ${customerUser.email}`);
       }
-      const createdCustomer = await Customer.create(customer);
-      customerMap.set(customer.email, createdCustomer);
-      console.log(`✓ Customer created: ${customer.email}`);
     }
 
-    // Seed artists
+    // Seed artists - New architecture: Create User first, then Artist profile
     const artistMap = new Map();
-    for (const artist of artistData) {
-      const category = categoryMap.get(artist.categoryName);
+    for (const artistDataItem of artistData) {
+      const category = categoryMap.get(artistDataItem.categoryName);
       if (!category) {
-        console.warn(`⚠️  Category not found for artist ${artist.email}, skipping.`);
+        console.warn(
+          `⚠️  Category not found for artist ${artistDataItem.email}, skipping.`
+        );
         continue;
       }
 
-      const existing = await Artist.findOne({ email: artist.email });
-      if (existing) {
-        artistMap.set(artist.email, existing);
-        console.log(`ℹ️  Artist exists, skipping: ${artist.email}`);
-        continue;
-      }
-
-      const createdArtist = await Artist.create({
-        name: artist.name,
-        email: artist.email,
-        password: artist.password,
-        phone: artist.phone,
-        bio: artist.bio,
-        category: category._id,
-        skills: artist.skills,
-        hourlyRate: artist.hourlyRate,
-        isApproved: artist.isApproved,
+      let artistUser = await User.findOne({
+        email: artistDataItem.email,
+        role: "artist",
       });
+      let artist = null;
 
-      artistMap.set(artist.email, createdArtist);
-      console.log(`✓ Artist created: ${artist.email}`);
+      if (!artistUser) {
+        // Step 1: Create user in Users collection
+        artistUser = await User.create({
+          name: artistDataItem.name,
+          email: artistDataItem.email,
+          password: artistDataItem.password, // Will be hashed by pre-save hook
+          phone: artistDataItem.phone,
+          role: "artist",
+          category: category._id,
+          isApproved: artistDataItem.isApproved,
+          isActive: true,
+        });
+
+        // Step 2: Create Artist profile
+        artist = await Artist.create({
+          userId: artistUser._id,
+          bio: artistDataItem.bio,
+          category: category._id,
+          skills: artistDataItem.skills,
+          hourlyRate: artistDataItem.hourlyRate,
+          isApproved: artistDataItem.isApproved,
+          isActive: true,
+        });
+
+        // Step 3: Link User to Artist profile
+        artistUser.profileRef = artist._id;
+        artistUser.profileType = "Artist";
+        await artistUser.save();
+
+        artistMap.set(artistDataItem.email, artist);
+        console.log(`✓ Artist created: ${artistUser.email}`);
+      } else {
+        // Artist user exists, fetch the profile
+        artist = await Artist.findOne({ userId: artistUser._id });
+        artistMap.set(artistDataItem.email, artist);
+        console.log(`ℹ️  Artist exists, skipping: ${artistUser.email}`);
+      }
     }
 
     // Seed bookings
@@ -370,10 +496,13 @@ const seedDatabase = async () => {
     for (const notification of notificationsData) {
       let userDoc = null;
       if (notification.userModel === "Artist") {
+        // Notification references the Artist profile, not User
         userDoc = artistMap.get(notification.userEmail);
       } else if (notification.userModel === "Customer") {
+        // Notification references the Customer profile, not User
         userDoc = customerMap.get(notification.userEmail);
       } else if (notification.userModel === "Admin") {
+        // Notification references the Admin profile, not User
         userDoc = admin;
       }
 
@@ -435,4 +564,3 @@ const seedDatabase = async () => {
 seedDatabase();
 
 export default seedDatabase;
-

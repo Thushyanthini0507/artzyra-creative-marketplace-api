@@ -9,6 +9,8 @@ import {
   getUserById,
   getAllBookings,
   getDashboardStats,
+  getPendingCustomers,
+  getPendingArtists,
 } from "../controllers/adminController.js";
 import { verifyToken, checkApproval } from "../middleware/authMiddleware.js";
 import { verifyRole } from "../middleware/roleMiddleware.js";
@@ -23,6 +25,8 @@ router.use(verifyRole("admin"));
 router.put("/users/approve", approveUser);
 router.get("/users", getUsersByRole);
 router.get("/users/:role/:userId", getUserById);
+router.get("/pending/customers", getPendingCustomers);
+router.get("/pending/artists", getPendingArtists);
 router.get("/bookings", getAllBookings);
 router.get("/dashboard/stats", getDashboardStats);
 

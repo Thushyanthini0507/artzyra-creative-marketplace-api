@@ -1,32 +1,18 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 import { generateToken } from "../config/jwt.js";
 import Category from "./Category.js";
 
 const artistSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: [true, "Please provide a name"],
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: [true, "Please provide an email"],
+    // Reference to Users collection (REQUIRED)
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
       unique: true,
-      lowercase: true,
-      trim: true,
+      index: true,
     },
-    password: {
-      type: String,
-      required: [true, "Please provide a password"],
-      minlength: 6,
-      select: false,
-    },
-    phone: {
-      type: String,
-      trim: true,
-    },
+    // Profile-specific fields
     bio: {
       type: String,
       trim: true,
@@ -68,11 +54,7 @@ const artistSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-    role: {
-      type: String,
-      enum: ["artist"],
-      default: "artist",
-    },
+    // Status fields (synced with Users collection)
     isApproved: {
       type: Boolean,
       default: false, // Requires admin approval
@@ -87,23 +69,9 @@ const artistSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
-artistSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    return next();
-  }
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-// Compare password method
-artistSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-// Generate JWT token
+// Generate JWT token (uses userId from Users collection)
 artistSchema.methods.getSignedJwtToken = function () {
-  return generateToken({ id: this._id, role: "artist" });
+  return generateToken({ id: this.userId, role: "artist" });
 };
 
 // Index for search

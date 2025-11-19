@@ -1,11 +1,18 @@
 /**
  * User Controller
- * Handles registration, user listings, and profile retrieval
+ * Handles registration with centralized Users collection
+ * Flow: 
+ * - Customers/Artists: Save to pending tables → Admin approves → Move to Users + profile
+ * - Category users: Create User in Users collection first → Then create role-specific profile
  */
 import mongoose from "mongoose";
+import User from "../models/User.js";
 import Admin from "../models/Admin.js";
 import Artist from "../models/Artist.js";
 import Customer from "../models/Customer.js";
+import CategoryUser from "../models/CategoryUser.js";
+import PendingCustomer from "../models/PendingCustomer.js";
+import PendingArtist from "../models/PendingArtist.js";
 import Category from "../models/Category.js";
 import {
   BadRequestError,
@@ -13,9 +20,12 @@ import {
   NotFoundError,
 } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
+import { generateToken } from "../config/jwt.js";
 
 /**
- * Register a new user (artist or customer)
+ * Register a new user
+ * For Customers/Artists: Save to pending tables (requires admin approval)
+ * For Category users: Create User in Users collection → Then create profile
  * @route POST /api/users/register
  */
 export const registerUser = asyncHandler(async (req, res) => {
@@ -25,45 +35,119 @@ export const registerUser = asyncHandler(async (req, res) => {
     email,
     password,
     phone,
+    // Customer fields
+    address,
+    // Artist fields
     bio,
     category,
     skills,
     hourlyRate,
-    address,
+    availability,
+    // Category user fields
+    categoryName,
+    subCategory,
+    experience,
+    portfolio,
   } = req.body;
 
+  // Validate required fields
   if (!role || !name || !email || !password) {
     throw new BadRequestError("Please provide role, name, email, and password");
   }
 
+  // Validate role
+  const validRoles = ["customer", "artist", "admin", "category"];
+  if (!validRoles.includes(role)) {
+    throw new BadRequestError(
+      `Invalid role. Must be one of: ${validRoles.join(", ")}`
+    );
+  }
+
+  // Admin cannot self-register
   if (role === "admin") {
     throw new BadRequestError("Admin accounts cannot be self-registered.");
   }
 
-  if (role !== "artist" && role !== "customer") {
-    throw new BadRequestError(
-      "Invalid role. Only 'artist' and 'customer' roles are allowed."
-    );
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new BadRequestError("Please provide a valid email address");
+  }
+
+  // Validate password strength (minimum 6 characters)
+  if (password.length < 6) {
+    throw new BadRequestError("Password must be at least 6 characters long");
+  }
+
+  // Validate name (minimum 2 characters)
+  if (name.trim().length < 2) {
+    throw new BadRequestError("Name must be at least 2 characters long");
   }
 
   const normalizedEmail = email.toLowerCase().trim();
 
-  // Check if email already exists across all collections
-  const [existingAdmin, existingArtist, existingCustomer] = await Promise.all([
-    Admin.findOne({ email: normalizedEmail }),
-    Artist.findOne({ email: normalizedEmail }),
-    Customer.findOne({ email: normalizedEmail }),
-  ]);
-
-  if (existingAdmin || existingArtist || existingCustomer) {
+  // Check if email already exists in Users collection
+  const existingUser = await User.findOne({ email: normalizedEmail });
+  if (existingUser) {
     throw new ConflictError("User with this email already exists");
   }
 
+  // Handle CUSTOMER registration - Instant access (no approval needed)
+  if (role === "customer") {
+    // Step 1: Create user in Users collection (auto-approved)
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password, // Will be hashed by pre-save hook
+      phone: phone?.trim(),
+      role: "customer",
+      isApproved: true, // Customers are auto-approved
+      isActive: true,
+    });
+
+    // Step 2: Create Customer profile
+    const customer = await Customer.create({
+      userId: user._id,
+      address,
+      profileImage: req.body.profileImage || "",
+      isApproved: true,
+      isActive: true,
+    });
+
+    // Step 3: Link User to Customer profile
+    user.profileRef = customer._id;
+    user.profileType = "Customer";
+    await user.save();
+
+    // Step 4: Generate token for immediate access
+    const token = generateToken({ id: user._id, role: user.role });
+
+    return res.status(201).json({
+      success: true,
+      message: "Customer registered successfully. You can now log in.",
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isApproved: user.isApproved,
+          profileId: customer._id,
+        },
+        token, // Return token for immediate access
+        redirectPath: "/customer/dashboard", // Role-based redirection path
+      },
+    });
+  }
+
+  // Handle ARTIST registration - Save to pending table
   if (role === "artist") {
+    // Validate category
     if (!category) {
       throw new BadRequestError("Category is required for artist registration");
     }
 
+    // Find category by ID or name
     let categoryId = null;
     if (mongoose.Types.ObjectId.isValid(category)) {
       categoryId = category;
@@ -79,66 +163,138 @@ export const registerUser = asyncHandler(async (req, res) => {
       categoryId = categoryDoc._id;
     }
 
+    // Verify category exists
     const categoryExists = await Category.findById(categoryId);
     if (!categoryExists) {
-      throw new BadRequestError("Invalid category provided for artist");
+      throw new BadRequestError("Invalid category provided");
     }
 
-    const artist = await Artist.create({
+    // Check if email exists in pending artists
+    const existingPending = await PendingArtist.findOne({
+      email: normalizedEmail,
+    });
+    if (existingPending) {
+      throw new ConflictError(
+        "Registration request already pending. Please wait for admin approval."
+      );
+    }
+
+    // Create pending artist (password will be hashed by pre-save hook)
+    const pendingArtist = await PendingArtist.create({
       name: name.trim(),
       email: normalizedEmail,
-      password,
-      phone,
+      password, // Will be hashed by pre-save hook
+      phone: phone?.trim(),
       bio,
+      profileImage: req.body.profileImage || "",
       category: categoryId,
-      skills,
-      hourlyRate,
+      skills: skills || [],
+      hourlyRate: hourlyRate || 0,
+      availability: availability || {},
+      status: "pending",
     });
 
     return res.status(201).json({
       success: true,
       message:
-        "Artist registered successfully. Please wait for admin approval.",
+        "Artist registration submitted successfully. Please wait for admin approval.",
       data: {
-        user: {
-          id: artist._id,
-          name: artist.name,
-          email: artist.email,
-          role: artist.role,
-          isApproved: artist.isApproved,
-        },
+        pendingId: pendingArtist._id,
+        name: pendingArtist.name,
+        email: pendingArtist.email,
+        status: pendingArtist.status,
       },
     });
   }
 
-  const customer = await Customer.create({
-    name: name.trim(),
-    email: normalizedEmail,
-    password,
-    phone,
-    address,
-    isApproved: true, // Customers are auto-approved
-  });
+  // Handle CATEGORY USER registration - Keep existing flow (direct to Users)
+  if (role === "category") {
+    // Handle category
+    if (!category) {
+      throw new BadRequestError(
+        "Category is required for category user registration"
+      );
+    }
 
-  return res.status(201).json({
-    success: true,
-    message: "Customer registered successfully. You can now log in.",
-    data: {
-      user: {
-        id: customer._id,
-        name: customer.name,
-        email: customer.email,
-        role: customer.role,
-        isApproved: customer.isApproved,
+    // Find category by ID or name
+    let categoryId = null;
+    if (mongoose.Types.ObjectId.isValid(category)) {
+      categoryId = category;
+    } else {
+      const categoryDoc = await Category.findOne({
+        name: { $regex: new RegExp(`^${category}$`, "i") },
+      });
+      if (!categoryDoc) {
+        throw new NotFoundError(
+          `Category not found. Provide a valid category id or name.`
+        );
+      }
+      categoryId = categoryDoc._id;
+    }
+
+    // Verify category exists
+    const categoryExists = await Category.findById(categoryId);
+    if (!categoryExists) {
+      throw new BadRequestError("Invalid category provided");
+    }
+
+    // Create user in Users collection
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      password, // Will be hashed by pre-save hook
+      phone: phone?.trim(),
+      role,
+      category: categoryId,
+      isApproved: false, // Category users need approval
+      isActive: true,
+    });
+
+    // Get category name if not provided
+    const categoryDoc = await Category.findById(categoryId);
+    const finalCategoryName = categoryName || categoryDoc?.name || "";
+
+    // Create profile
+    const profile = await CategoryUser.create({
+      userId: user._id,
+      categoryName: finalCategoryName,
+      category: categoryId,
+      subCategory,
+      skills: skills || [],
+      hourlyRate: hourlyRate || 0,
+      experience: experience || { years: 0, description: "" },
+      portfolio: portfolio || [],
+      availability: availability || {},
+      isApproved: false,
+      isActive: true,
+    });
+
+    // Link User to profile
+    user.profileRef = profile._id;
+    user.profileType = "CategoryUser";
+    await user.save();
+
+    return res.status(201).json({
+      success: true,
+      message:
+        "Category user registered successfully. Please wait for admin approval.",
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          isApproved: user.isApproved,
+          profileId: profile._id,
+        },
       },
-    },
-  });
+    });
+  }
 });
 
 /**
- * Get all non-admin users with search and filtering
+ * Get all users with search and filtering
  * @route GET /api/users
- * Query params: search, role, isApproved, isActive, page, limit, sortBy, sortOrder
  */
 export const getAllUsers = asyncHandler(async (req, res) => {
   const {
@@ -155,107 +311,84 @@ export const getAllUsers = asyncHandler(async (req, res) => {
     sortOrder = "desc",
   } = req.query;
 
-  // Build artist query
-  const artistQuery = {};
-  if (search) {
-    artistQuery.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
-      { bio: { $regex: search, $options: "i" } },
-      { skills: { $in: [new RegExp(search, "i")] } },
-    ];
+  const query = {};
+
+  // Role filter
+  if (role) {
+    query.role = role;
   }
+
+  // Status filters
   if (isApproved !== undefined) {
-    artistQuery.isApproved = isApproved === "true";
+    query.isApproved = isApproved === "true";
   }
   if (isActive !== undefined) {
-    artistQuery.isActive = isActive === "true";
+    query.isActive = isActive === "true";
   }
+
+  // Category filter
   if (category) {
-    artistQuery.category = category;
-  }
-  if (minRating) {
-    artistQuery.rating = { $gte: parseFloat(minRating) };
-  }
-  if (maxHourlyRate) {
-    artistQuery.hourlyRate = { $lte: parseFloat(maxHourlyRate) };
+    query.category = category;
   }
 
-  // Build customer query
-  const customerQuery = {};
+  // Search filter
   if (search) {
-    customerQuery.$or = [
+    query.$or = [
       { name: { $regex: search, $options: "i" } },
       { email: { $regex: search, $options: "i" } },
     ];
   }
-  if (isApproved !== undefined) {
-    customerQuery.isApproved = isApproved === "true";
-  }
-  if (isActive !== undefined) {
-    customerQuery.isActive = isActive === "true";
-  }
 
+  // Pagination
   const skip = (parseInt(page) - 1) * parseInt(limit);
   const limitNum = parseInt(limit);
   const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
-  let artists = [];
-  let customers = [];
+  // Get users from Users collection
+  const users = await User.find(query)
+    .select("-password")
+    .populate("category", "name description")
+    .skip(skip)
+    .limit(limitNum)
+    .sort(sort);
 
-  // Fetch based on role filter
-  if (!role || role === "artist") {
-    artists = await Artist.find(artistQuery)
-      .select("-password")
-      .populate("category", "name description")
-      .skip(role === "artist" ? skip : 0)
-      .limit(role === "artist" ? limitNum : 1000)
-      .sort(sort);
-  }
+  const total = await User.countDocuments(query);
 
-  if (!role || role === "customer") {
-    customers = await Customer.find(customerQuery)
-      .select("-password")
-      .skip(role === "customer" ? skip : 0)
-      .limit(role === "customer" ? limitNum : 1000)
-      .sort(sort);
-  }
+  // Populate profile data based on profileType
+  const usersWithProfiles = await Promise.all(
+    users.map(async (user) => {
+      let profileData = null;
 
-  // Combine and format
-  const users = [
-    ...artists.map((artist) => ({
-      ...artist.toObject(),
-      role: "artist",
-    })),
-    ...customers.map((customer) => ({
-      ...customer.toObject(),
-      role: "customer",
-    })),
-  ];
+      if (user.profileType === "Customer") {
+        profileData = await Customer.findOne({ userId: user._id });
+      } else if (user.profileType === "Artist") {
+        profileData = await Artist.findOne({ userId: user._id })
+          .populate("category", "name description");
+      } else if (user.profileType === "CategoryUser") {
+        profileData = await CategoryUser.findOne({ userId: user._id })
+          .populate("category", "name description");
+      } else if (user.profileType === "Admin") {
+        profileData = await Admin.findOne({ userId: user._id });
+      }
 
-  // If no role filter, apply pagination to combined results
-  let paginatedUsers = users;
-  let total = users.length;
-
-  if (!role) {
-    total = users.length;
-    paginatedUsers = users.slice(skip, skip + limitNum);
-  } else {
-    total =
-      role === "artist"
-        ? await Artist.countDocuments(artistQuery)
-        : await Customer.countDocuments(customerQuery);
-  }
+      return {
+        ...user.toObject(),
+        profile: profileData,
+      };
+    })
+  );
 
   res.json({
     success: true,
     message: "Users retrieved successfully",
-    data: paginatedUsers,
+    data: usersWithProfiles,
     pagination: {
       currentPage: parseInt(page),
       limit: limitNum,
       totalItems: total,
       totalPages: Math.ceil(total / limitNum),
+      hasNextPage: skip + users.length < total,
+      hasPrevPage: parseInt(page) > 1,
     },
   });
 });

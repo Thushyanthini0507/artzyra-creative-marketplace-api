@@ -1,11 +1,14 @@
 /**
  * Authentication Middleware
  * Provides JWT verification and approval checks
+ * Uses centralized Users collection
  */
 import { verifyToken as verifyJwtToken } from "../config/jwt.js";
+import User from "../models/User.js";
 import Admin from "../models/Admin.js";
 import Artist from "../models/Artist.js";
 import Customer from "../models/Customer.js";
+import CategoryUser from "../models/CategoryUser.js";
 import { UnauthorizedError, ForbiddenError } from "../utils/errors.js";
 
 /**
@@ -40,39 +43,44 @@ export const verifyToken = asyncHandler(async (req, res, next) => {
     // Verify token
     const decoded = verifyJwtToken(token);
 
-    // Find user based on role
-    let user = null;
-    let userModel = null;
-
-    if (decoded.role === "admin") {
-      user = await Admin.findById(decoded.id).select("-password");
-      userModel = "Admin";
-    } else if (decoded.role === "artist") {
-      user = await Artist.findById(decoded.id).select("-password");
-      userModel = "Artist";
-    } else if (decoded.role === "customer") {
-      user = await Customer.findById(decoded.id).select("-password");
-      userModel = "Customer";
-    } else {
-      throw new UnauthorizedError("Invalid token. Unknown role.");
-    }
-
+    // Find user in Users collection (central collection)
+    const user = await User.findById(decoded.id).select("-password");
+    
     if (!user) {
       throw new UnauthorizedError("User not found. Token may be invalid.");
     }
 
-    // Check if user is active (for artists and customers)
-    if (userModel !== "Admin" && user.isActive === false) {
+    // Verify role matches
+    if (user.role !== decoded.role) {
+      throw new UnauthorizedError("Invalid token. Role mismatch.");
+    }
+
+    // Check if user is active
+    if (user.isActive === false) {
       throw new ForbiddenError(
         "Your account has been deactivated. Please contact support."
       );
     }
 
-    // Attach user to request
-    req.user = user;
-    req.userId = decoded.id;
-    req.userRole = decoded.role;
-    req.userModel = userModel;
+    // Get profile from role-specific collection
+    let profile = null;
+    if (user.profileType === "Customer") {
+      profile = await Customer.findOne({ userId: user._id });
+    } else if (user.profileType === "Artist") {
+      profile = await Artist.findOne({ userId: user._id })
+        .populate("category", "name description");
+    } else if (user.profileType === "Admin") {
+      profile = await Admin.findOne({ userId: user._id });
+    } else if (user.profileType === "CategoryUser") {
+      profile = await CategoryUser.findOne({ userId: user._id })
+        .populate("category", "name description");
+    }
+
+    // Attach user and profile to request
+    req.user = { ...user.toObject(), profile };
+    req.userId = user._id;
+    req.userRole = user.role;
+    req.userModel = user.profileType;
 
     next();
   } catch (error) {

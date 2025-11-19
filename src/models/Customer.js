@@ -1,31 +1,17 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 import { generateToken } from "../config/jwt.js";
 
 const customerSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: [true, "Please provide a name"],
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: [true, "Please provide an email"],
+    // Reference to Users collection (REQUIRED)
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
       unique: true,
-      lowercase: true,
-      trim: true,
+      index: true,
     },
-    password: {
-      type: String,
-      required: [true, "Please provide a password"],
-      minlength: 6,
-      select: false,
-    },
-    phone: {
-      type: String,
-      trim: true,
-    },
+    // Profile-specific fields
     address: {
       street: String,
       city: String,
@@ -37,11 +23,7 @@ const customerSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    role: {
-      type: String,
-      enum: ["customer"],
-      default: "customer",
-    },
+    // Status fields (synced with Users collection)
     isApproved: {
       type: Boolean,
       default: true, // Customers are auto-approved
@@ -56,23 +38,9 @@ const customerSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
-customerSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    return next();
-  }
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-// Compare password method
-customerSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-// Generate JWT token
+// Generate JWT token (uses userId from Users collection)
 customerSchema.methods.getSignedJwtToken = function () {
-  return generateToken({ id: this._id, role: "customer" });
+  return generateToken({ id: this.userId, role: "customer" });
 };
 
 export default mongoose.model("Customer", customerSchema);

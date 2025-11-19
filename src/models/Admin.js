@@ -1,32 +1,22 @@
 import mongoose from "mongoose";
-import bcrypt from "bcryptjs";
 import { generateToken } from "../config/jwt.js";
 
 const adminSchema = new mongoose.Schema(
   {
-    name: {
-      type: String,
-      required: [true, "Please provide a name"],
-      trim: true,
-    },
-    email: {
-      type: String,
-      required: [true, "Please provide an email"],
+    // Reference to Users collection (REQUIRED)
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
       unique: true,
-      lowercase: true,
-      trim: true,
+      index: true,
     },
-    password: {
-      type: String,
-      required: [true, "Please provide a password"],
-      minlength: 6,
-      select: false,
+    // Admin-specific fields can be added here
+    permissions: {
+      type: [String],
+      default: [],
     },
-    role: {
-      type: String,
-      enum: ["admin"],
-      default: "admin",
-    },
+    // Status fields (synced with Users collection)
     isApproved: {
       type: Boolean,
       default: true, // Admins are auto-approved
@@ -37,23 +27,9 @@ const adminSchema = new mongoose.Schema(
   }
 );
 
-// Hash password before saving
-adminSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    return next();
-  }
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-// Compare password method
-adminSchema.methods.comparePassword = async function (candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
-};
-
-// Generate JWT token
+// Generate JWT token (uses userId from Users collection)
 adminSchema.methods.getSignedJwtToken = function () {
-  return generateToken({ id: this._id, role: "admin" });
+  return generateToken({ id: this.userId, role: "admin" });
 };
 
 export default mongoose.model("Admin", adminSchema);

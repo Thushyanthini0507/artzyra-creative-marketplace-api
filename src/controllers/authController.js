@@ -1,50 +1,71 @@
 /**
  * Authentication Controller
- * Handles login and authentication for all user types
+ * Handles login using centralized Users collection
  */
-import Admin from "../models/Admin.js";
-import Artist from "../models/Artist.js";
+import User from "../models/User.js";
 import Customer from "../models/Customer.js";
+import Artist from "../models/Artist.js";
+import Admin from "../models/Admin.js";
+import CategoryUser from "../models/CategoryUser.js";
+import PendingCustomer from "../models/PendingCustomer.js";
+import PendingArtist from "../models/PendingArtist.js";
 import { BadRequestError, UnauthorizedError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
+import { generateToken } from "../config/jwt.js";
 
 /**
  * Login
+ * Uses Users collection for authentication
  * @route POST /api/auth/login
  */
 export const login = asyncHandler(async (req, res) => {
   const { email, password, role } = req.body;
 
   // Validate required fields
-  if (!email || !password || !role) {
-    throw new BadRequestError("Please provide email, password, and role");
+  if (!email || !password) {
+    throw new BadRequestError("Please provide email and password");
   }
 
-  // Determine user model based on role
-  let User, userRole;
-  if (role === "admin") {
-    User = Admin;
-    userRole = "admin";
-  } else if (role === "artist") {
-    User = Artist;
-    userRole = "artist";
-  } else if (role === "customer") {
-    User = Customer;
-    userRole = "customer";
-  } else {
-    throw new BadRequestError(
-      "Invalid role. Must be admin, artist, or customer"
-    );
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new BadRequestError("Please provide a valid email address");
   }
 
-  // Find user and include password for comparison
+  // Validate password is provided
+  if (password.length < 1) {
+    throw new BadRequestError("Password is required");
+  }
+
   const normalizedEmail = email.toLowerCase().trim();
 
+  // Find user in Users collection (include password for comparison)
   const user = await User.findOne({ email: normalizedEmail }).select(
     "+password"
   );
+
+  // If user not found in Users, check pending tables (only for non-customer roles)
   if (!user) {
+    // Check if user is in pending tables (only artists and other roles, not customers)
+    const pendingArtist = await PendingArtist.findOne({
+      email: normalizedEmail,
+    }).select("+password");
+
+    if (pendingArtist) {
+      throw new UnauthorizedError(
+        "Your account is pending approval. Please wait for admin approval before logging in."
+      );
+    }
+
+    // User doesn't exist in Users or pending tables
     throw new UnauthorizedError("Invalid email or password");
+  }
+
+  // If role is provided, validate it matches
+  if (role && user.role !== role) {
+    throw new UnauthorizedError(
+      `Invalid role. This account is registered as ${user.role}`
+    );
   }
 
   // Check password
@@ -53,10 +74,12 @@ export const login = asyncHandler(async (req, res) => {
     throw new UnauthorizedError("Invalid email or password");
   }
 
-  // Check if user is approved (admins and customers are always approved)
-  if (userRole !== "admin" && userRole !== "customer" && !user.isApproved) {
+  // Check if user is approved
+  // Customers and admins are auto-approved and get instant access
+  // Other roles (Artist, CategoryUser, etc.) require admin approval
+  if (user.role !== "admin" && user.role !== "customer" && !user.isApproved) {
     throw new UnauthorizedError(
-      "Your account is pending approval. Please wait for admin approval."
+      "Your account is pending approval. Please wait for admin approval before logging in."
     );
   }
 
@@ -67,8 +90,41 @@ export const login = asyncHandler(async (req, res) => {
     );
   }
 
-  // Generate token
-  const token = user.getSignedJwtToken();
+  // Get profile data from role-specific collection
+  let profile = null;
+  if (user.profileType === "Customer") {
+    profile = await Customer.findOne({ userId: user._id });
+  } else if (user.profileType === "Artist") {
+    profile = await Artist.findOne({ userId: user._id })
+      .populate("category", "name description");
+  } else if (user.profileType === "Admin") {
+    profile = await Admin.findOne({ userId: user._id });
+  } else if (user.profileType === "CategoryUser") {
+    profile = await CategoryUser.findOne({ userId: user._id })
+      .populate("category", "name description");
+  }
+
+  // Generate token using user ID from Users collection
+  const token = generateToken({ id: user._id, role: user.role });
+
+  // Determine redirect path based on role
+  let redirectPath = "/";
+  switch (user.role) {
+    case "customer":
+      redirectPath = "/customer/dashboard";
+      break;
+    case "artist":
+      redirectPath = "/artist/dashboard";
+      break;
+    case "admin":
+      redirectPath = "/admin/dashboard";
+      break;
+    case "category":
+      redirectPath = "/category/dashboard";
+      break;
+    default:
+      redirectPath = "/";
+  }
 
   res.json({
     success: true,
@@ -78,10 +134,15 @@ export const login = asyncHandler(async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: userRole,
-        isApproved: user.isApproved || true,
+        phone: user.phone,
+        role: user.role,
+        isApproved: user.isApproved,
+        isActive: user.isActive,
+        category: user.category,
       },
+      profile,
       token,
+      redirectPath, // Role-based redirection path for frontend
     },
   });
 });
@@ -92,10 +153,29 @@ export const login = asyncHandler(async (req, res) => {
  */
 export const getMe = asyncHandler(async (req, res) => {
   // User is already attached to req by authenticate middleware
+  // Get full profile data
+  const user = await User.findById(req.userId)
+    .select("-password")
+    .populate("category", "name description");
+
+  let profile = null;
+  if (user.profileType === "Customer") {
+    profile = await Customer.findOne({ userId: user._id });
+  } else if (user.profileType === "Artist") {
+    profile = await Artist.findOne({ userId: user._id })
+      .populate("category", "name description");
+  } else if (user.profileType === "Admin") {
+    profile = await Admin.findOne({ userId: user._id });
+  } else if (user.profileType === "CategoryUser") {
+    profile = await CategoryUser.findOne({ userId: user._id })
+      .populate("category", "name description");
+  }
+
   res.json({
     success: true,
     data: {
-      user: req.user,
+      user,
+      profile,
     },
   });
 });

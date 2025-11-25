@@ -80,14 +80,14 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
   // For artists, use status field (pending/approved/rejected/suspended)
   // For customers, use isActive field
   if (role === "artist") {
-    if (isApproved !== undefined) {
+  if (isApproved !== undefined) {
       // Map isApproved to status field for artists
       query.status = isApproved === "true" ? "approved" : { $ne: "approved" };
-    }
+  }
   } else {
     // For customers, isActive is the status field
-    if (isActive !== undefined) {
-      query.isActive = isActive === "true";
+  if (isActive !== undefined) {
+    query.isActive = isActive === "true";
     }
   }
 

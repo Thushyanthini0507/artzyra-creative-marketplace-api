@@ -159,9 +159,9 @@ export const checkApproval = asyncHandler(async (req, res, next) => {
   if (req.userRole === "artist") {
     const artist = await Artist.findOne({ userId: req.userId });
     if (!artist || artist.status !== "approved") {
-      throw new ForbiddenError(
-        "Your account is pending approval. Please wait for admin approval."
-      );
+    throw new ForbiddenError(
+      "Your account is pending approval. Please wait for admin approval."
+    );
     }
   }
 

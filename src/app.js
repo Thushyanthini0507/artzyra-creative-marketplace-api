@@ -8,6 +8,7 @@ import cors from "cors";
 import connectDB from "./config/db.js";
 import errorHandler from "./middleware/errorMiddleware.js";
 import { apiRateLimiter } from "./middleware/rateLimiter.js";
+import { ensureDBConnection } from "./middleware/dbMiddleware.js";
 
 // Import routes (Entity-based architecture)
 import authRoutes from "./routes/authRoutes.js";
@@ -21,9 +22,6 @@ import paymentsRoutes from "./routes/paymentRoutes.js";
 import reviewsRoutes from "./routes/reviewRoutes.js";
 import notificationsRoutes from "./routes/notificationRoutes.js";
 
-// Connect to database
-connectDB();
-
 // Initialize Express app
 const app = express();
 
@@ -32,6 +30,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/api", apiRateLimiter);
+
+// Ensure database connection for all API routes (critical for serverless)
+app.use("/api", ensureDBConnection);
 
 // Health check route
 app.get("/health", (req, res) => {

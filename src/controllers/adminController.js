@@ -5,7 +5,7 @@
 
 import Artist from "../models/Artist.js";
 import Customer from "../models/Customer.js";
-import PendingArtist from "../models/PendingArtist.js";
+import User from "../models/User.js";
 import Booking from "../models/Booking.js";
 import Category from "../models/Category.js";
 import Payment from "../models/Payment.js";
@@ -50,11 +50,11 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
   }
 
   // Determine which model to use based on role
-  let User;
+  let ProfileModel;
   if (role === "artist") {
-    User = Artist;
+    ProfileModel = Artist;
   } else if (role === "customer") {
-    User = Customer;
+    ProfileModel = Customer;
   } else {
     throw new BadRequestError("Invalid role. Must be artist or customer");
   }
@@ -63,33 +63,32 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
   const query = {};
 
   // SEARCH FILTER
-  // Searches across multiple fields using $or operator
-  // For artists: name, email, bio, skills
-  // For customers: name, email
-  // $regex with "i" option = case-insensitive
-  // $in with RegExp = search in array fields (skills)
+  // Note: name and email are in User model, not in Artist/Customer models
+  // We'll search in profile fields and then filter by user email if needed
   if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
-    ];
-    // Add artist-specific search fields
     if (role === "artist") {
-      query.$or.push(
+      query.$or = [
         { bio: { $regex: search, $options: "i" } },
-        { skills: { $in: [new RegExp(search, "i")] } }
-      );
+        { skills: { $in: [new RegExp(search, "i")] } },
+      ];
     }
+    // For customers, we can search in address fields if needed
+    // For now, we'll handle email search separately via User model
   }
 
   // STATUS FILTERS
-  // Convert string "true"/"false" to boolean
-  // Example: ?isApproved=true
-  if (isApproved !== undefined) {
-    query.isApproved = isApproved === "true";
-  }
-  if (isActive !== undefined) {
-    query.isActive = isActive === "true";
+  // For artists, use status field (pending/approved/rejected/suspended)
+  // For customers, use isActive field
+  if (role === "artist") {
+    if (isApproved !== undefined) {
+      // Map isApproved to status field for artists
+      query.status = isApproved === "true" ? "approved" : { $ne: "approved" };
+    }
+  } else {
+    // For customers, isActive is the status field
+    if (isActive !== undefined) {
+      query.isActive = isActive === "true";
+    }
   }
 
   // ARTIST-SPECIFIC FILTERS
@@ -117,16 +116,26 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
   const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
   // EXECUTE QUERY
-  const users = await User.find(query)
-    .select("-password") // Exclude password from results
-    .populate("category", "name description")
+  const profiles = await ProfileModel.find(query)
+    .populate("category", "name description image")
     .skip(skip)
     .limit(limitNum)
     .sort(sort);
 
-  const total = await User.countDocuments(query);
+  // Get user emails for each profile
+  const formattedUsers = await Promise.all(
+    profiles.map(async (profile) => {
+      const user = await User.findById(profile.userId).select("email");
+      return {
+        ...profile.toObject(),
+        email: user?.email || "",
+      };
+    })
+  );
 
-  const response = formatPaginationResponse(users, total, page, limit);
+  const total = await ProfileModel.countDocuments(query);
+
+  const response = formatPaginationResponse(formattedUsers, total, page, limit);
 
   res.json({
     success: true,
@@ -142,27 +151,32 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
 export const getUserById = asyncHandler(async (req, res) => {
   const { userId, role } = req.params;
 
-  let User;
+  let ProfileModel;
   if (role === "artist") {
-    User = Artist;
+    ProfileModel = Artist;
   } else if (role === "customer") {
-    User = Customer;
+    ProfileModel = Customer;
   } else {
     throw new BadRequestError("Invalid role. Must be artist or customer");
   }
 
-  const user = await User.findById(userId)
-    .select("-password")
+  const profile = await ProfileModel.findById(userId)
     .populate("category", "name description image");
 
-  if (!user) {
+  if (!profile) {
     throw new NotFoundError("User not found");
   }
+
+  // Get user email from User collection
+  const userDoc = await User.findById(profile.userId).select("email");
 
   res.json({
     success: true,
     data: {
-      user,
+      user: {
+        ...profile.toObject(),
+        email: userDoc?.email || "",
+      },
     },
   });
 });
@@ -259,16 +273,37 @@ export const getAllBookings = asyncHandler(async (req, res) => {
   const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
   const bookings = await Booking.find(query)
-    .populate("customer", "name email phone")
-    .populate("artist", "name email phone profileImage rating")
+    .populate("customer", "profileImage")
+    .populate("artist", "profileImage rating category")
     .populate("category", "name description")
     .skip(skip)
     .limit(limitNum)
     .sort(sort);
 
+  // Get user emails for customers and artists
+  const formattedBookings = await Promise.all(
+    bookings.map(async (booking) => {
+      const bookingObj = booking.toObject();
+      
+      // Get customer user email
+      if (bookingObj.customer?.userId) {
+        const customerUser = await User.findById(bookingObj.customer.userId).select("email");
+        bookingObj.customer.email = customerUser?.email || "";
+      }
+      
+      // Get artist user email
+      if (bookingObj.artist?.userId) {
+        const artistUser = await User.findById(bookingObj.artist.userId).select("email");
+        bookingObj.artist.email = artistUser?.email || "";
+      }
+      
+      return bookingObj;
+    })
+  );
+
   const total = await Booking.countDocuments(query);
 
-  const response = formatPaginationResponse(bookings, total, page, limit);
+  const response = formatPaginationResponse(formattedBookings, total, page, limit);
 
   res.json({
     success: true,
@@ -279,64 +314,16 @@ export const getAllBookings = asyncHandler(async (req, res) => {
 
 /**
  * Get pending artists (Admin only)
- * @route GET /api/admin/pending/artists
+ * Note: This endpoint is now handled by /api/artists/pending
+ * Keeping for backward compatibility but redirects to artist controller
  */
 export const getPendingArtists = asyncHandler(async (req, res) => {
-  const {
-    search,
-    status,
-    category,
-    page = 1,
-    limit = 10,
-    sortBy = "createdAt",
-    sortOrder = "desc",
-  } = req.query;
-
-  const query = {};
-
-  // Status filter
-  if (status) {
-    query.status = status;
-  } else {
-    // Default to pending if no status specified
-    query.status = "pending";
-  }
-
-  // Category filter
-  if (category) {
-    query.category = category;
-  }
-
-  // Search filter
-  if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: "i" } },
-      { email: { $regex: search, $options: "i" } },
-      { bio: { $regex: search, $options: "i" } },
-      { skills: { $in: [new RegExp(search, "i")] } },
-    ];
-  }
-
-  // Pagination
-  const skip = (parseInt(page) - 1) * parseInt(limit);
-  const limitNum = parseInt(limit);
-  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
-
-  const pendingArtists = await PendingArtist.find(query)
-    .select("-password")
-    .populate("category", "name description")
-    .skip(skip)
-    .limit(limitNum)
-    .sort(sort);
-
-  const total = await PendingArtist.countDocuments(query);
-
-  const response = formatPaginationResponse(pendingArtists, total, page, limit);
-
+  // This is now handled by artistController.getPendingArtists
+  // Route: GET /api/artists/pending
   res.json({
     success: true,
-    data: response.data,
-    pagination: response.pagination,
+    message: "Use GET /api/artists/pending instead",
+    data: [],
   });
 });
 

@@ -37,7 +37,11 @@ const connectDB = async () => {
       console.error("   - Example: @ becomes %40, # becomes %23\n");
     }
 
-    process.exit(1); // Exit process with failure
+    // Don't exit process in Vercel/serverless environment
+    // In serverless, we want to continue and let Vercel handle errors
+    if (process.env.VERCEL !== "1") {
+      process.exit(1);
+    }
   }
 };
 

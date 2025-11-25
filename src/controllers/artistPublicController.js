@@ -4,6 +4,7 @@
  */
 import mongoose from "mongoose";
 import Artist from "../models/Artist.js";
+import User from "../models/User.js";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
 
@@ -22,8 +23,8 @@ import { asyncHandler } from "../middleware/authMiddleware.js";
 export const getArtists = asyncHandler(async (req, res) => {
   const { category, search, page = 1, limit = 10 } = req.query;
 
-  // Base query - only approved and active artists
-  const query = { isApproved: true, isActive: true };
+  // Base query - only approved artists (status="approved")
+  const query = { status: "approved" };
 
   // CATEGORY FILTER
   // Filter artists by specific category
@@ -39,17 +40,16 @@ export const getArtists = asyncHandler(async (req, res) => {
 
   // SEARCH FILTER
   // Searches across multiple fields using $or operator
-  // - name: Artist name
   // - bio: Artist biography
   // - skills: Skills array (uses $in with RegExp for array search)
+  // Note: name is in User model, we'll search by email or populate user data
   // Example: ?search=photography
-  // Will match artists with "photography" in name, bio, or skills
+  // Will match artists with "photography" in bio or skills
   if (search) {
     const regex = new RegExp(search, "i"); // Case-insensitive regex
     query.$or = [
-      { name: regex },
       { bio: regex },
-      { skills: regex }, // Searches in skills array
+      { skills: { $in: [new RegExp(search, "i")] } }, // Searches in skills array
     ];
   }
 
@@ -63,19 +63,29 @@ export const getArtists = asyncHandler(async (req, res) => {
   // Use Promise.all to run query and count in parallel for better performance
   const [artists, total] = await Promise.all([
     Artist.find(query)
-      .select("-password")
-      .populate("category", "name description")
+      .populate("userId", "email")
+      .populate("category", "name description image")
       .skip(skip)
       .limit(limitNum)
       .sort({ createdAt: -1 }), // Sort by newest first
     Artist.countDocuments(query), // Get total count for pagination
   ]);
 
+  // Format response with user email
+  const formattedArtists = artists.map((artist) => {
+    const artistObj = artist.toObject();
+    return {
+      ...artistObj,
+      email: artistObj.userId?.email || "",
+      userId: artistObj.userId?._id || artistObj.userId,
+    };
+  });
+
   // RESPONSE
   res.json({
     success: true,
     message: "Artists retrieved successfully",
-    data: artists,
+    data: formattedArtists,
     pagination: {
       currentPage: pageNum,
       limit: limitNum,
@@ -101,19 +111,26 @@ export const getArtistById = asyncHandler(async (req, res) => {
 
   const artist = await Artist.findOne({
     _id: id,
-    isApproved: true,
-    isActive: true,
+    status: "approved",
   })
-    .select("-password")
-    .populate("category", "name description");
+    .populate("userId", "email")
+    .populate("category", "name description image");
 
   if (!artist) {
     throw new NotFoundError("Artist");
   }
 
+  // Format response with user email
+  const artistObj = artist.toObject();
+  const formattedArtist = {
+    ...artistObj,
+    email: artistObj.userId?.email || "",
+    userId: artistObj.userId?._id || artistObj.userId,
+  };
+
   res.json({
     success: true,
     message: "Artist retrieved successfully",
-    data: artist,
+    data: formattedArtist,
   });
 });

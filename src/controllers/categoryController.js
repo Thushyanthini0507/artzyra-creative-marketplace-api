@@ -183,11 +183,10 @@ export const getArtistsByCategory = asyncHandler(async (req, res) => {
   const { categoryId } = req.params;
   const { search, minRating, maxRate, page = 1, limit = 10 } = req.query;
 
-  // Base query - only approved and active artists in this category
+  // Base query - only approved artists in this category
   const query = {
     category: categoryId,
-    isApproved: true,
-    isActive: true,
+    status: "approved",
   };
 
   // RATING FILTER
@@ -205,11 +204,11 @@ export const getArtistsByCategory = asyncHandler(async (req, res) => {
   }
 
   // SEARCH FILTER
-  // Searches in name, bio, and skills array
+  // Searches in bio and skills array
+  // Note: name is in User model, not Artist model
   // Example: ?search=photography
   if (search) {
     query.$or = [
-      { name: { $regex: search, $options: "i" } },
       { bio: { $regex: search, $options: "i" } },
       { skills: { $in: [new RegExp(search, "i")] } },
     ];
@@ -220,7 +219,7 @@ export const getArtistsByCategory = asyncHandler(async (req, res) => {
   const limitNum = parseInt(limit);
 
   const artists = await Artist.find(query)
-    .select("-password")
+    .populate("userId", "email")
     .populate("category", "name description image")
     .skip(skip)
     .limit(limitNum)
@@ -228,7 +227,17 @@ export const getArtistsByCategory = asyncHandler(async (req, res) => {
 
   const total = await Artist.countDocuments(query);
 
-  const response = formatPaginationResponse(artists, total, page, limit);
+  // Format response with user email
+  const formattedArtists = artists.map((artist) => {
+    const artistObj = artist.toObject();
+    return {
+      ...artistObj,
+      email: artistObj.userId?.email || "",
+      userId: artistObj.userId?._id || artistObj.userId,
+    };
+  });
+
+  const response = formatPaginationResponse(formattedArtists, total, page, limit);
 
   res.json({
     success: true,

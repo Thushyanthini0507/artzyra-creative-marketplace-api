@@ -4,7 +4,7 @@
  * Protected routes for user profile management
  */
 import express from "express";
-import { login, getMe, logout } from "../controllers/authController.js";
+import { login, getMe, logout, registerCustomer, registerArtist } from "../controllers/authController.js";
 import { verifyToken, checkApproval } from "../middleware/authMiddleware.js";
 import { verifyRole } from "../middleware/roleMiddleware.js";
 import { authRateLimiter } from "../middleware/rateLimiter.js";
@@ -12,6 +12,8 @@ import { authRateLimiter } from "../middleware/rateLimiter.js";
 const router = express.Router();
 
 // Public routes
+router.post("/register/customer", authRateLimiter, registerCustomer);
+router.post("/register/artist", authRateLimiter, registerArtist);
 router.post("/login", authRateLimiter, login);
 
 const authenticatedRoles = ["admin", "artist", "customer"];

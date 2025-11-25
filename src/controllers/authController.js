@@ -1,14 +1,16 @@
 /**
  * Authentication Controller
- * Handles login using centralized Users collection
+ * Handles login and registration using centralized Users collection
  */
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Customer from "../models/Customer.js";
 import Artist from "../models/Artist.js";
 import Admin from "../models/Admin.js";
 import CategoryUser from "../models/CategoryUser.js";
 import PendingArtist from "../models/PendingArtist.js";
-import { BadRequestError, UnauthorizedError } from "../utils/errors.js";
+import Category from "../models/Category.js";
+import { BadRequestError, UnauthorizedError, ConflictError, NotFoundError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
 import { generateToken } from "../config/jwt.js";
 
@@ -196,6 +198,182 @@ export const logout = asyncHandler(async (req, res) => {
     data: {
       userId: req.userId,
       role: req.userRole,
+    },
+  });
+});
+
+/**
+ * Register Customer
+ * Customers get instant access (no approval needed)
+ * @route POST /api/auth/register/customer
+ */
+export const registerCustomer = asyncHandler(async (req, res) => {
+  const { email, password, name, phone, address, profileImage } = req.body;
+
+  // Validate required fields
+  if (!email || !password) {
+    throw new BadRequestError("Please provide email and password");
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new BadRequestError("Please provide a valid email address");
+  }
+
+  // Validate password strength (minimum 6 characters)
+  if (password.length < 6) {
+    throw new BadRequestError("Password must be at least 6 characters long");
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Check if email already exists in Users collection
+  const existingUser = await User.findOne({ email: normalizedEmail });
+  if (existingUser) {
+    throw new ConflictError("User with this email already exists");
+  }
+
+  // Step 1: Create user in Users collection (auto-approved)
+  const user = await User.create({
+    email: normalizedEmail,
+    password, // Will be hashed by pre-save hook
+    role: "customer",
+    isActive: true,
+  });
+
+  // Step 2: Create Customer profile
+  const customer = await Customer.create({
+    userId: user._id,
+    address: address || {},
+    profileImage: profileImage || "",
+    isActive: true,
+  });
+
+  // Step 4: Generate token for immediate access
+  const token = generateToken({ id: user._id, role: user.role });
+
+  return res.status(201).json({
+    success: true,
+    message: "Customer registered successfully. You can now log in.",
+    data: {
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+        profileId: customer._id,
+      },
+      token, // Return token for immediate access
+      redirectPath: "/customer/dashboard", // Role-based redirection path
+    },
+  });
+});
+
+/**
+ * Register Artist
+ * Artists are saved to pending table (requires admin approval)
+ * @route POST /api/auth/register/artist
+ */
+export const registerArtist = asyncHandler(async (req, res) => {
+  const {
+    email,
+    password,
+    name,
+    phone,
+    bio,
+    category,
+    skills,
+    hourlyRate,
+    availability,
+    profileImage,
+  } = req.body;
+
+  // Validate required fields
+  if (!email || !password) {
+    throw new BadRequestError("Please provide email and password");
+  }
+
+  // Validate category
+  if (!category) {
+    throw new BadRequestError("Category is required for artist registration");
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new BadRequestError("Please provide a valid email address");
+  }
+
+  // Validate password strength (minimum 6 characters)
+  if (password.length < 6) {
+    throw new BadRequestError("Password must be at least 6 characters long");
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Check if email already exists in Users collection
+  const existingUser = await User.findOne({ email: normalizedEmail });
+  if (existingUser) {
+    throw new ConflictError("User with this email already exists");
+  }
+
+  // Check if email exists in pending artists
+  const existingPending = await PendingArtist.findOne({
+    email: normalizedEmail,
+  });
+  if (existingPending) {
+    throw new ConflictError(
+      "Registration request already pending. Please wait for admin approval."
+    );
+  }
+
+  // Find category by ID or name
+  let categoryId = null;
+  if (mongoose.Types.ObjectId.isValid(category)) {
+    categoryId = category;
+  } else {
+    const categoryDoc = await Category.findOne({
+      name: { $regex: new RegExp(`^${category}$`, "i") },
+    });
+    if (!categoryDoc) {
+      throw new NotFoundError(
+        `Category not found. Provide a valid category id or name.`
+      );
+    }
+    categoryId = categoryDoc._id;
+  }
+
+  // Verify category exists
+  const categoryExists = await Category.findById(categoryId);
+  if (!categoryExists) {
+    throw new BadRequestError("Invalid category provided");
+  }
+
+  // Create pending artist (password will be hashed by pre-save hook)
+  const pendingArtist = await PendingArtist.create({
+    name: name?.trim() || "",
+    email: normalizedEmail,
+    password, // Will be hashed by pre-save hook
+    phone: phone?.trim(),
+    bio,
+    profileImage: profileImage || "",
+    category: categoryId,
+    skills: skills || [],
+    hourlyRate: hourlyRate || 0,
+    availability: availability || {},
+    status: "pending",
+  });
+
+  return res.status(201).json({
+    success: true,
+    message:
+      "Artist registration submitted successfully. Please wait for admin approval.",
+    data: {
+      pendingId: pendingArtist._id,
+      name: pendingArtist.name,
+      email: pendingArtist.email,
+      status: pendingArtist.status,
     },
   });
 });

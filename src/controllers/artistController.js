@@ -106,7 +106,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
  * Get artist bookings with search and filtering
  * @route GET /api/artist/bookings
  * Query params: search, status, paymentStatus, category, startDate, endDate, minAmount, maxAmount, page, limit, sortBy, sortOrder
- * 
+ *
  * EXPLANATION:
  * Same filtering logic as customer bookings but filtered by artist ID instead of customer ID
  */
@@ -239,7 +239,7 @@ export const acceptBooking = asyncHandler(async (req, res) => {
   // Handle customer reference - might be User ID or Customer profile ID
   let customerUserId = null;
   let customerName = "Customer";
-  
+
   if (booking.customer && booking.customer._id) {
     // Customer was successfully populated (Customer profile ID was used)
     const customerProfile = await Customer.findById(booking.customer._id);
@@ -326,7 +326,7 @@ export const rejectBooking = asyncHandler(async (req, res) => {
   // Handle customer reference - might be User ID or Customer profile ID
   let customerUserId = null;
   let customerName = "Customer";
-  
+
   if (booking.customer && booking.customer._id) {
     // Customer was successfully populated (Customer profile ID was used)
     const customerProfile = await Customer.findById(booking.customer._id);
@@ -372,12 +372,11 @@ export const rejectBooking = asyncHandler(async (req, res) => {
   });
 });
 
-
 /**
  * Get artist reviews with search and filtering
  * @route GET /api/artist/reviews
  * Query params: search, minRating, maxRating, startDate, endDate, page, limit, sortBy, sortOrder
- * 
+ *
  * EXPLANATION:
  * Filters reviews for the logged-in artist with rating and date range filters
  */
@@ -532,7 +531,7 @@ export const approveArtist = asyncHandler(async (req, res) => {
   const pendingArtist = await PendingArtist.findById(id)
     .select("+password")
     .populate("category");
-  
+
   if (!pendingArtist) {
     throw new NotFoundError("Pending artist");
   }
@@ -549,10 +548,10 @@ export const approveArtist = asyncHandler(async (req, res) => {
   const existingUser = await User.findOne({
     email: pendingArtist.email,
   });
-  
+
   let user;
   let artist;
-  
+
   if (existingUser) {
     // User already exists - check their role and profile
     if (existingUser.role !== "artist") {
@@ -561,28 +560,30 @@ export const approveArtist = asyncHandler(async (req, res) => {
       // We should reject the pending artist and inform admin
       pendingArtist.status = "rejected";
       await pendingArtist.save();
-      
+
       throw new ConflictError(
         `User with this email already exists as ${existingUser.role}. Cannot approve as artist. The pending artist registration has been rejected.`
       );
     }
-    
+
     // User exists with artist role - check if they have an Artist profile
     const existingArtist = await Artist.findOne({ userId: existingUser._id });
-    
+
     if (existingArtist) {
       // Artist already approved - this pending artist is a duplicate
       // Just update pending artist status and return success
       pendingArtist.status = "approved";
       await pendingArtist.save();
       await PendingArtist.findByIdAndDelete(id);
-      
-      const populatedArtist = await Artist.findById(existingArtist._id)
-        .populate("category", "name description image");
-      
+
+      const populatedArtist = await Artist.findById(
+        existingArtist._id
+      ).populate("category", "name description image");
+
       return res.json({
         success: true,
-        message: "Artist is already approved. Duplicate pending registration removed.",
+        message:
+          "Artist is already approved. Duplicate pending registration removed.",
         data: {
           user: {
             id: existingUser._id,
@@ -597,10 +598,11 @@ export const approveArtist = asyncHandler(async (req, res) => {
       // User exists with artist role but no Artist profile - create the profile
       // This handles edge case where User was created but Artist profile wasn't
       user = existingUser;
-      
+
       // Create Artist profile from pending artist data
       artist = await Artist.create({
         userId: user._id,
+        name: pendingArtist.name,
         bio: pendingArtist.bio,
         profileImage: pendingArtist.profileImage,
         category: pendingArtist.category._id,
@@ -633,6 +635,7 @@ export const approveArtist = asyncHandler(async (req, res) => {
     // Step 2: Create Artist profile
     artist = await Artist.create({
       userId: user._id,
+      name: pendingArtist.name,
       bio: pendingArtist.bio,
       profileImage: pendingArtist.profileImage,
       category: pendingArtist.category._id,
@@ -685,7 +688,7 @@ export const rejectArtist = asyncHandler(async (req, res) => {
   // Update status to rejected before deleting
   pendingArtist.status = "rejected";
   await pendingArtist.save();
-  
+
   // Delete the pending artist
   await PendingArtist.findByIdAndDelete(id);
 

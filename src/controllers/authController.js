@@ -296,7 +296,9 @@ export const registerArtist = asyncHandler(async (req, res) => {
 
   // Validate category
   if (!category) {
-    throw new BadRequestError("Category is required for artist registration");
+    throw new BadRequestError(
+      "Category is required for artist registration. Please select a valid category from the dropdown."
+    );
   }
 
   // Validate email format
@@ -347,7 +349,13 @@ export const registerArtist = asyncHandler(async (req, res) => {
   // Verify category exists
   const categoryExists = await Category.findById(categoryId);
   if (!categoryExists) {
-    throw new BadRequestError("Invalid category provided");
+    // Get all available categories for helpful error message
+    const availableCategories = await Category.find({ isActive: true }).select('name');
+    const categoryNames = availableCategories.map(c => c.name).join(', ');
+    
+    throw new BadRequestError(
+      `Invalid category provided. Received: "${category}". Available categories: ${categoryNames}`
+    );
   }
 
   // Handle availability - convert string to proper format for Mongoose Map

@@ -70,6 +70,13 @@ export const verifyToken = asyncHandler(async (req, res, next) => {
         .populate("category", "name description");
     } else if (user.role === "admin") {
       profile = await Admin.findOne({ userId: user._id });
+      // Auto-create Admin profile if it doesn't exist
+      if (!profile) {
+        profile = await Admin.create({
+          userId: user._id,
+          permissions: [],
+        });
+      }
     }
 
     // Attach user and profile to request

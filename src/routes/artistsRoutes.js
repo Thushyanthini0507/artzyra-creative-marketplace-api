@@ -29,14 +29,14 @@ router.get(
 );
 
 // Admin routes - Artist approval/rejection
-router.patch(
+router.put(
   "/:id/approve",
   verifyToken,
   requireRole("admin"),
   checkApproval,
   approveArtist
 );
-router.patch(
+router.put(
   "/:id/reject",
   verifyToken,
   requireRole("admin"),

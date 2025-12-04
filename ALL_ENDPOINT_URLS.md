@@ -117,11 +117,11 @@
 
 20. **Approve Artist**
 
-    - `PATCH /api/artists/:id/approve`
+    - `PUT /api/artists/:id/approve`
     - Requires: Admin role
 
 21. **Reject Artist**
-    - `PATCH /api/artists/:id/reject`
+    - `PUT /api/artists/:id/reject`
     - Requires: Admin role
     - Body (optional): `{ "reason": "string" }`
 
@@ -329,8 +329,8 @@
 - `/api/artists/bookings/:bookingId/reject` (PUT) - Artist only
 - `/api/artists/reviews` (GET) - Artist only
 - `/api/artists/pending` (GET) - Admin only
-- `/api/artists/:id/approve` (PATCH) - Admin only
-- `/api/artists/:id/reject` (PATCH) - Admin only
+- `/api/artists/:id/approve` (put) - Admin only
+- `/api/artists/:id/reject` (put) - Admin only
 
 ### Customers (4 endpoints)
 

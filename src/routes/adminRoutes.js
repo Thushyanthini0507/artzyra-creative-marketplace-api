@@ -14,6 +14,7 @@ import {
   approveArtist,
   rejectArtist,
 } from "../controllers/artistController.js";
+import { getPayments } from "../controllers/paymentController.js";
 import { verifyToken, checkApproval } from "../middleware/authMiddleware.js";
 import { verifyRole } from "../middleware/roleMiddleware.js";
 
@@ -30,6 +31,7 @@ router.get("/pending/artists", getPendingArtists);
 router.put("/artists/:id/approve", approveArtist);
 router.put("/artists/:id/reject", rejectArtist);
 router.get("/bookings", getAllBookings);
+router.get("/payments", getPayments);
 router.get("/dashboard/status", getDashboardStatus);
 
 export default router;

@@ -10,6 +10,7 @@ import Booking from "../models/Booking.js";
 import Category from "../models/Category.js";
 import Payment from "../models/Payment.js";
 import Review from "../models/Review.js";
+import PendingArtist from "../models/PendingArtist.js";
 import { NotFoundError, BadRequestError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
 import { formatPaginationResponse } from "../utils/paginate.js";
@@ -116,8 +117,12 @@ export const getUsersByRole = asyncHandler(async (req, res) => {
   const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
   // EXECUTE QUERY
-  const profiles = await ProfileModel.find(query)
-    .populate("category", "name description image")
+  // Only populate category for artists (customers don't have category field)
+  let queryBuilder = ProfileModel.find(query);
+  if (role === "artist") {
+    queryBuilder = queryBuilder.populate("category", "name description image");
+  }
+  const profiles = await queryBuilder
     .skip(skip)
     .limit(limitNum)
     .sort(sort);
@@ -314,16 +319,64 @@ export const getAllBookings = asyncHandler(async (req, res) => {
 
 /**
  * Get pending artists (Admin only)
- * Note: This endpoint is now handled by /api/artists/pending
- * Keeping for backward compatibility but redirects to artist controller
+ * @route GET /api/admin/pending/artists
+ * Query params: search, status, category, page, limit, sortBy, sortOrder
  */
 export const getPendingArtists = asyncHandler(async (req, res) => {
-  // This is now handled by artistController.getPendingArtists
-  // Route: GET /api/artists/pending
+  const {
+    search,
+    status,
+    category,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    sortOrder = "desc",
+  } = req.query;
+
+  const query = {};
+
+  // Status filter - default to pending if no status specified
+  if (status) {
+    query.status = status;
+  } else {
+    query.status = "pending";
+  }
+
+  // Category filter
+  if (category) {
+    query.category = category;
+  }
+
+  // Search filter
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+      { bio: { $regex: search, $options: "i" } },
+      { skills: { $in: [new RegExp(search, "i")] } },
+    ];
+  }
+
+  // Pagination
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const limitNum = parseInt(limit);
+  const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
+
+  const pendingArtists = await PendingArtist.find(query)
+    .select("-password")
+    .populate("category", "name description image")
+    .skip(skip)
+    .limit(limitNum)
+    .sort(sort);
+
+  const total = await PendingArtist.countDocuments(query);
+
+  const response = formatPaginationResponse(pendingArtists, total, page, limit);
+
   res.json({
     success: true,
-    message: "Use GET /api/artists/pending instead",
-    data: [],
+    data: response.data,
+    pagination: response.pagination,
   });
 });
 

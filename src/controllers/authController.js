@@ -174,20 +174,27 @@ export const login = asyncHandler(async (req, res) => {
  */
 export const getMe = asyncHandler(async (req, res) => {
   // User is already attached to req by authenticate middleware
-  // Get full profile data
+  // Get full profile data - don't populate category on User model (it doesn't exist there)
   const user = await User.findById(req.userId)
-    .select("-password")
-    .populate("category", "name description");
+    .select("-password");
 
+  // Get profile from role-specific collection based on user.role (not profileType)
   let profile = null;
-  if (user.profileType === "Customer") {
+  if (user.role === "customer") {
     profile = await Customer.findOne({ userId: user._id });
-  } else if (user.profileType === "Artist") {
+  } else if (user.role === "artist") {
     profile = await Artist.findOne({ userId: user._id })
       .populate("category", "name description");
-  } else if (user.profileType === "Admin") {
+  } else if (user.role === "admin") {
     profile = await Admin.findOne({ userId: user._id });
-  } else if (user.profileType === "CategoryUser") {
+    // Auto-create Admin profile if it doesn't exist
+    if (!profile) {
+      profile = await Admin.create({
+        userId: user._id,
+        permissions: [],
+      });
+    }
+  } else if (user.role === "category") {
     profile = await CategoryUser.findOne({ userId: user._id })
       .populate("category", "name description");
   }

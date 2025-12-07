@@ -3,9 +3,11 @@
  * Handles customer profile management, bookings, and reviews
  */
 import Customer from "../models/Customer.js";
+import Artist from "../models/Artist.js";
+import User from "../models/User.js";
 import Booking from "../models/Booking.js";
 import Review from "../models/Review.js";
-import { NotFoundError } from "../utils/errors.js";
+import { NotFoundError, BadRequestError } from "../utils/errors.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
 import { formatPaginationResponse } from "../utils/paginate.js";
 
@@ -350,5 +352,86 @@ export const getReviews = asyncHandler(async (req, res) => {
     success: true,
     data: response.data,
     pagination: response.pagination,
+  });
+});
+
+/**
+ * Get customer's favorite artists
+ * @route GET /api/customers/favorites
+ */
+export const getFavorites = asyncHandler(async (req, res) => {
+  // Find customer profile by userId
+  const customer = await Customer.findOne({ userId: req.userId });
+
+  if (!customer) {
+    throw new NotFoundError("Customer not found");
+  }
+
+  // Get favorite artists with populated data
+  const favorites = await Artist.find({ _id: { $in: customer.favorites || [] } })
+    .populate("category", "name description image")
+    .select("name bio profileImage category skills hourlyRate rating availability");
+
+  res.json({
+    success: true,
+    data: favorites,
+  });
+});
+
+/**
+ * Toggle favorite artist (add or remove)
+ * @route POST /api/customers/favorites
+ */
+export const toggleFavorite = asyncHandler(async (req, res) => {
+  const { artistId } = req.body;
+
+  if (!artistId) {
+    throw new BadRequestError("Artist ID is required");
+  }
+
+  // Validate artist exists
+  const artist = await Artist.findById(artistId);
+  if (!artist) {
+    throw new NotFoundError("Artist not found");
+  }
+
+  // Find customer profile by userId
+  const customer = await Customer.findOne({ userId: req.userId });
+
+  if (!customer) {
+    throw new NotFoundError("Customer not found");
+  }
+
+  // Initialize favorites array if it doesn't exist
+  if (!customer.favorites) {
+    customer.favorites = [];
+  }
+
+  // Check if artist is already in favorites
+  const isFavorite = customer.favorites.some(
+    (id) => id.toString() === artistId.toString()
+  );
+  let isFavorited;
+
+  if (isFavorite) {
+    // Remove from favorites
+    customer.favorites = customer.favorites.filter(
+      (id) => id.toString() !== artistId.toString()
+    );
+    isFavorited = false;
+  } else {
+    // Add to favorites
+    customer.favorites.push(artistId);
+    isFavorited = true;
+  }
+
+  await customer.save();
+
+  res.json({
+    success: true,
+    message: isFavorited
+      ? "Artist added to favorites"
+      : "Artist removed from favorites",
+    isFavorited,
   });
 });

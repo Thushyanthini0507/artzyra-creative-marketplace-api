@@ -295,11 +295,22 @@ export const registerCustomer = asyncHandler(async (req, res) => {
   // Validate and normalize phone number if provided
   let normalizedPhone = "";
   if (phone) {
-    const { normalizeSriLankanPhone, isValidSriLankanPhone } = await import("../utils/phoneValidation.js");
-    if (!isValidSriLankanPhone(phone)) {
-      throw new BadRequestError("Please provide a valid Sri Lankan phone number (e.g., 0712345678 or 712345678)");
+    // Remove all non-digit characters for validation
+    const digitsOnly = phone.replace(/\D/g, "");
+    
+    // Basic phone validation: must be between 7 and 15 digits (international standard)
+    if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+      throw new BadRequestError("Please provide a valid phone number (7-15 digits)");
     }
-    normalizedPhone = normalizeSriLankanPhone(phone);
+    
+    // Try to normalize as Sri Lankan phone if it matches the format, otherwise use as-is
+    const { normalizeSriLankanPhone, isValidSriLankanPhone } = await import("../utils/phoneValidation.js");
+    if (isValidSriLankanPhone(phone)) {
+      normalizedPhone = normalizeSriLankanPhone(phone);
+    } else {
+      // Accept any valid phone number format (just remove non-digits)
+      normalizedPhone = digitsOnly;
+    }
   }
 
   const customer = await Customer.create({

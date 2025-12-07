@@ -8,6 +8,8 @@ import {
   updateProfile,
   getBookings,
   getReviews,
+  getFavorites,
+  toggleFavorite,
 } from "../controllers/customerController.js";
 import { verifyToken, checkApproval } from "../middleware/authMiddleware.js";
 import { requireRole } from "../middleware/roleMiddleware.js";
@@ -46,6 +48,22 @@ router.get(
   requireRole("customer"),
   checkApproval,
   getReviews
+);
+
+// Customer-only routes - Favorites
+router.get(
+  "/favorites",
+  verifyToken,
+  requireRole("customer"),
+  checkApproval,
+  getFavorites
+);
+router.post(
+  "/favorites",
+  verifyToken,
+  requireRole("customer"),
+  checkApproval,
+  toggleFavorite
 );
 
 export default router;

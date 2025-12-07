@@ -20,13 +20,12 @@ const customerSchema = new mongoose.Schema(
       validate: {
         validator: function (v) {
           if (!v) return true; // Allow empty (optional field)
-          const {
-            isValidSriLankanPhone,
-          } = require("../utils/phoneValidation.js");
-          return isValidSriLankanPhone(v);
+          // Accept any phone number with 7-15 digits (international standard)
+          const digitsOnly = v.replace(/\D/g, "");
+          return digitsOnly.length >= 7 && digitsOnly.length <= 15;
         },
         message:
-          "Please provide a valid Sri Lankan phone number (e.g., 0712345678 or 712345678)",
+          "Please provide a valid phone number (7-15 digits)",
       },
     },
     address: {
@@ -69,13 +68,12 @@ const customerSchema = new mongoose.Schema(
         validate: {
           validator: function (v) {
             if (!v) return true; // Allow empty (optional field)
-            const {
-              isValidSriLankanPhone,
-            } = require("../utils/phoneValidation.js");
-            return isValidSriLankanPhone(v);
+            // Accept any phone number with 7-15 digits (international standard)
+            const digitsOnly = v.replace(/\D/g, "");
+            return digitsOnly.length >= 7 && digitsOnly.length <= 15;
           },
           message:
-            "Please provide a valid Sri Lankan phone number (e.g., 0712345678 or 712345678)",
+            "Please provide a valid phone number (7-15 digits)",
         },
       },
       relationship: { type: String, trim: true },
@@ -88,6 +86,13 @@ const customerSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Favorite artists
+    favorites: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Artist",
+      },
+    ],
   },
   {
     timestamps: true,

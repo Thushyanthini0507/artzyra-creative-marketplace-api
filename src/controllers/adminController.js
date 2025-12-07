@@ -528,3 +528,236 @@ export const getDashboardStatus = asyncHandler(async (req, res) => {
     },
   });
 });
+
+/**
+ * Get analytics data (Admin only)
+ * @route GET /api/admin/analytics
+ * Query params: period (7d, 30d, 90d, 1y, all) - default: 30d
+ */
+export const getAnalytics = asyncHandler(async (req, res) => {
+  const { period = "30d" } = req.query;
+  
+  // Calculate date range based on period
+  let startDate = new Date();
+  const endDate = new Date();
+  
+  switch (period) {
+    case "7d":
+      startDate.setDate(startDate.getDate() - 7);
+      break;
+    case "30d":
+      startDate.setDate(startDate.getDate() - 30);
+      break;
+    case "90d":
+      startDate.setDate(startDate.getDate() - 90);
+      break;
+    case "1y":
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      break;
+    case "all":
+      startDate = new Date(0); // Beginning of time
+      break;
+    default:
+      startDate.setDate(startDate.getDate() - 30);
+  }
+
+  // User registrations over time
+  const userRegistrations = await User.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate },
+        role: { $in: ["artist", "customer"] }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          role: "$role"
+        },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { "_id.date": 1 } }
+  ]);
+
+  // Bookings over time
+  const bookingsOverTime = await Booking.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          status: "$status"
+        },
+        count: { $sum: 1 },
+        totalAmount: { $sum: "$totalAmount" }
+      }
+    },
+    { $sort: { "_id.date": 1 } }
+  ]);
+
+  // Revenue over time
+  const revenueOverTime = await Payment.aggregate([
+    {
+      $match: {
+        status: "completed",
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        revenue: { $sum: "$amount" },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { "_id": 1 } }
+  ]);
+
+  // Bookings by status
+  const bookingsByStatus = await Booking.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: "$status",
+        count: { $sum: 1 },
+        totalAmount: { $sum: "$totalAmount" }
+      }
+    }
+  ]);
+
+  // Revenue by category
+  const revenueByCategory = await Booking.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: { $in: ["accepted", "completed"] }
+      }
+    },
+    {
+      $lookup: {
+        from: "categories",
+        localField: "category",
+        foreignField: "_id",
+        as: "categoryInfo"
+      }
+    },
+    { $unwind: "$categoryInfo" },
+    {
+      $group: {
+        _id: "$category",
+        categoryName: { $first: "$categoryInfo.name" },
+        revenue: { $sum: "$totalAmount" },
+        bookings: { $sum: 1 }
+      }
+    },
+    { $sort: { revenue: -1 } },
+    { $limit: 10 }
+  ]);
+
+  // Top artists by bookings
+  const topArtistsByBookings = await Booking.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: "$artist",
+        bookings: { $sum: 1 },
+        revenue: { $sum: "$totalAmount" }
+      }
+    },
+    { $sort: { bookings: -1 } },
+    { $limit: 10 },
+    {
+      $lookup: {
+        from: "artists",
+        localField: "_id",
+        foreignField: "_id",
+        as: "artistInfo"
+      }
+    },
+    { $unwind: "$artistInfo" },
+    {
+      $project: {
+        artistId: "$_id",
+        artistName: "$artistInfo.name",
+        bookings: 1,
+        revenue: 1
+      }
+    }
+  ]);
+
+  // Monthly summary
+  const monthlySummary = await Booking.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate, $lte: endDate }
+      }
+    },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+        bookings: { $sum: 1 },
+        revenue: { $sum: "$totalAmount" }
+      }
+    },
+    { $sort: { "_id": 1 } }
+  ]);
+
+  // Format user registrations for charts
+  const formattedUserRegistrations = {};
+  userRegistrations.forEach(item => {
+    const date = item._id.date;
+    if (!formattedUserRegistrations[date]) {
+      formattedUserRegistrations[date] = { date, artists: 0, customers: 0 };
+    }
+    formattedUserRegistrations[date][item._id.role === "artist" ? "artists" : "customers"] = item.count;
+  });
+
+  // Format bookings over time
+  const formattedBookingsOverTime = {};
+  bookingsOverTime.forEach(item => {
+    const date = item._id.date;
+    if (!formattedBookingsOverTime[date]) {
+      formattedBookingsOverTime[date] = {
+        date,
+        pending: 0,
+        accepted: 0,
+        completed: 0,
+        cancelled: 0,
+        rejected: 0,
+        totalAmount: 0
+      };
+    }
+    formattedBookingsOverTime[date][item._id.status] = item.count;
+    formattedBookingsOverTime[date].totalAmount += item.totalAmount || 0;
+  });
+
+  res.json({
+    success: true,
+    data: {
+      period,
+      startDate,
+      endDate,
+      userRegistrations: Object.values(formattedUserRegistrations),
+      bookingsOverTime: Object.values(formattedBookingsOverTime),
+      revenueOverTime,
+      bookingsByStatus,
+      revenueByCategory,
+      topArtistsByBookings,
+      monthlySummary
+    }
+  });
+});

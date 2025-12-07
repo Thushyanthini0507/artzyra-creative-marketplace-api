@@ -306,7 +306,7 @@ export const registerCustomer = asyncHandler(async (req, res) => {
     // Try to normalize as Sri Lankan phone if it matches the format, otherwise use as-is
     const { normalizeSriLankanPhone, isValidSriLankanPhone } = await import("../utils/phoneValidation.js");
     if (isValidSriLankanPhone(phone)) {
-      normalizedPhone = normalizeSriLankanPhone(phone);
+    normalizedPhone = normalizeSriLankanPhone(phone);
     } else {
       // Accept any valid phone number format (just remove non-digits)
       normalizedPhone = digitsOnly;

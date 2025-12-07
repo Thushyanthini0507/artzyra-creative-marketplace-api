@@ -56,6 +56,7 @@ const errorHandler = (err, req, res, next) => {
     return res.status(err.statusCode).json({
       success: false,
       message: err.message,
+      error: err.message, // Also include as 'error' for frontend compatibility
       ...(err.errors && { errors: err.errors }),
       ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
     });
@@ -68,9 +69,9 @@ const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
+    error: message, // Also include as 'error' for frontend compatibility
     ...(process.env.NODE_ENV === "development" && {
       stack: err.stack,
-      error: err,
     }),
   });
 };

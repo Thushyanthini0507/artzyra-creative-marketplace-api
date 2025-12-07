@@ -9,6 +9,7 @@ import {
   getAllBookings,
   getPendingArtists,
   getDashboardStatus,
+  getAnalytics,
   getProfile,
   updateProfile,
 } from "../controllers/adminController.js";
@@ -39,5 +40,6 @@ router.put("/artists/:id/reject", rejectArtist);
 router.get("/bookings", getAllBookings);
 router.get("/payments", getPayments);
 router.get("/dashboard/status", getDashboardStatus);
+router.get("/analytics", getAnalytics);
 
 export default router;

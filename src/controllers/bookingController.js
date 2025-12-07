@@ -34,9 +34,18 @@ export const createBooking = asyncHandler(async (req, res) => {
     location,
   } = req.body;
 
+  console.log("📥 Booking request body:", req.body);
+  console.log("📥 User ID:", req.userId);
+
   // Validate required fields
   if (!artistId || !categoryId || !bookingDate || !startTime || !endTime) {
-    throw new BadRequestError("Please provide all required fields");
+    const missingFields = [];
+    if (!artistId) missingFields.push("artistId");
+    if (!categoryId) missingFields.push("categoryId");
+    if (!bookingDate) missingFields.push("bookingDate");
+    if (!startTime) missingFields.push("startTime");
+    if (!endTime) missingFields.push("endTime");
+    throw new BadRequestError(`Please provide all required fields. Missing: ${missingFields.join(", ")}`);
   }
 
   // Check if artist exists and is approved
@@ -45,7 +54,7 @@ export const createBooking = asyncHandler(async (req, res) => {
     throw new NotFoundError("Artist not found");
   }
 
-  if (!artist.isApproved || !artist.isActive) {
+  if (artist.status !== "approved") {
     throw new BadRequestError("Artist is not available for booking");
   }
 
@@ -81,50 +90,69 @@ export const createBooking = asyncHandler(async (req, res) => {
     throw new BadRequestError("Time slot is already booked");
   }
 
+  // Validate customer exists (req.userId should be set by auth middleware)
+  if (!req.userId) {
+    throw new BadRequestError("User authentication required");
+  }
+
   // Calculate duration and amount
   const start = new Date(`${bookingDate}T${startTime}`);
   const end = new Date(`${bookingDate}T${endTime}`);
   const duration = (end - start) / (1000 * 60 * 60); // Convert to hours
+  
+  if (duration <= 0) {
+    throw new BadRequestError("End time must be after start time");
+  }
+  
   const totalAmount = calculateBookingAmount(artist.hourlyRate, duration);
 
   // Create booking
-  const booking = await Booking.create({
-    customer: req.userId,
-    artist: artistId,
-    category: categoryId,
-    bookingDate: new Date(bookingDate),
-    startTime,
-    endTime,
-    duration,
-    totalAmount,
-    specialRequests,
-    location,
-  });
+  try {
+    const booking = await Booking.create({
+      customer: req.userId,
+      artist: artistId,
+      category: categoryId,
+      bookingDate: new Date(bookingDate),
+      startTime,
+      endTime,
+      duration,
+      totalAmount,
+      specialRequests: specialRequests || "",
+      location: location || "",
+    });
 
-  const populatedBooking = await Booking.findById(booking._id)
-    .populate("customer", "name email phone")
-    .populate("artist", "name email phone profileImage rating category")
-    .populate("category", "name description");
+    const populatedBooking = await Booking.findById(booking._id)
+      .populate("customer", "name email phone")
+      .populate("artist", "name email phone profileImage rating category")
+      .populate("category", "name description");
 
-  // Create notification for artist
-  await createNotification(
-    Notification,
-    artistId,
-    "Artist",
-    "booking_request",
-    "New Booking Request",
-    `You have a new booking request from ${req.user.name}`,
-    booking._id,
-    "Booking"
-  );
+    // Create notification for artist
+    await createNotification(
+      Notification,
+      artistId,
+      "Artist",
+      "booking_request",
+      "New Booking Request",
+      `You have a new booking request from ${req.user?.name || "a customer"}`,
+      booking._id,
+      "Booking"
+    );
 
-  res.status(201).json({
-    success: true,
-    message: "Booking created successfully",
-    data: {
-      booking: populatedBooking,
-    },
-  });
+    res.status(201).json({
+      success: true,
+      message: "Booking created successfully",
+      data: {
+        booking: populatedBooking,
+      },
+    });
+  } catch (dbError) {
+    console.error("Database error creating booking:", dbError);
+    if (dbError.name === "ValidationError") {
+      const errors = Object.values(dbError.errors).map((val) => val.message);
+      throw new BadRequestError(`Validation error: ${errors.join(", ")}`);
+    }
+    throw dbError;
+  }
 });
 
 /**

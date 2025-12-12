@@ -70,7 +70,20 @@ export const createPayment = asyncHandler(async (req, res) => {
     );
   }
 
-  // Create payment record
+  // If no paymentMethod was provided, just return clientSecret for Payment Element
+  // The actual payment confirmation will happen via verifyPaymentIntent endpoint
+  if (!paymentMethod) {
+    return res.status(200).json({
+      success: true,
+      message: "Payment intent created successfully",
+      data: {
+        clientSecret: paymentResult.clientSecret,
+        paymentIntentId: paymentResult.transactionId,
+      },
+    });
+  }
+
+  // If paymentMethod was provided, create payment record and complete the booking
   const payment = await Payment.create({
     booking: bookingId,
     customer: booking.customer._id,
@@ -79,14 +92,14 @@ export const createPayment = asyncHandler(async (req, res) => {
     currency: "USD",
     paymentMethod,
     transactionId: paymentResult.transactionId,
-    status: paymentResult.status === "completed" ? "completed" : "pending",
+    status: paymentResult.status === "succeeded" ? "completed" : "pending",
     paymentDate: new Date(),
   });
 
   // Update booking status to confirmed
   booking.status = "confirmed";
   booking.paymentStatus =
-    paymentResult.status === "completed" ? "paid" : "pending";
+    paymentResult.status === "succeeded" ? "paid" : "pending";
   booking.payment = payment._id;
   await booking.save();
 

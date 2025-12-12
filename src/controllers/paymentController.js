@@ -110,6 +110,7 @@ export const createPayment = asyncHandler(async (req, res) => {
     message: "Payment processed successfully",
     data: {
       payment: populatedPayment,
+      clientSecret: paymentResult.clientSecret,
     },
   });
 });

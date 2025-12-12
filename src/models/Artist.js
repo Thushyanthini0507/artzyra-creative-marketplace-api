@@ -139,6 +139,10 @@ const artistSchema = new mongoose.Schema(
     verifiedAt: {
       type: Date,
     },
+    stripeAccountId: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,

@@ -230,15 +230,12 @@ export const getAllBookings = asyncHandler(async (req, res) => {
   }
 
   // USER FILTERS
-  // Admin can filter by specific customer, artist, or category
+  // Admin can filter by specific customer or artist
   if (customer) {
     query.customer = customer;
   }
   if (artist) {
     query.artist = artist;
-  }
-  if (category) {
-    query.category = category;
   }
 
   // DATE RANGE FILTER
@@ -278,37 +275,15 @@ export const getAllBookings = asyncHandler(async (req, res) => {
   const sort = { [sortBy]: sortOrder === "asc" ? 1 : -1 };
 
   const bookings = await Booking.find(query)
-    .populate("customer", "profileImage")
-    .populate("artist", "profileImage rating category")
-    .populate("category", "name description")
+    .populate("customer", "name email profileImage")
+    .populate("artist", "name email profileImage")
     .skip(skip)
     .limit(limitNum)
     .sort(sort);
 
-  // Get user emails for customers and artists
-  const formattedBookings = await Promise.all(
-    bookings.map(async (booking) => {
-      const bookingObj = booking.toObject();
-      
-      // Get customer user email
-      if (bookingObj.customer?.userId) {
-        const customerUser = await User.findById(bookingObj.customer.userId).select("email");
-        bookingObj.customer.email = customerUser?.email || "";
-      }
-      
-      // Get artist user email
-      if (bookingObj.artist?.userId) {
-        const artistUser = await User.findById(bookingObj.artist.userId).select("email");
-        bookingObj.artist.email = artistUser?.email || "";
-      }
-      
-      return bookingObj;
-    })
-  );
-
   const total = await Booking.countDocuments(query);
 
-  const response = formatPaginationResponse(formattedBookings, total, page, limit);
+  const response = formatPaginationResponse(bookings, total, page, limit);
 
   res.json({
     success: true,

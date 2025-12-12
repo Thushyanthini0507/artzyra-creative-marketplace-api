@@ -8,6 +8,7 @@ import {
   getPaymentById,
   getPayments,
   refundPaymentRequest,
+  verifyPaymentIntent,
 } from "../controllers/paymentController.js";
 import { verifyToken, checkApproval } from "../middleware/authMiddleware.js";
 import { verifyRole } from "../middleware/roleMiddleware.js";
@@ -20,6 +21,9 @@ router.use(checkApproval);
 
 // Create payment (customer only)
 router.post("/", verifyRole("customer"), createPayment);
+
+// Verify payment
+router.post("/verify", verifyRole(["customer", "artist", "admin"]), verifyPaymentIntent);
 
 // Get payments (customer, artist, admin)
 router.get("/", verifyRole(["customer", "artist", "admin"]), getPayments);

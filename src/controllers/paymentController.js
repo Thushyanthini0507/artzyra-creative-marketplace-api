@@ -380,3 +380,151 @@ export const refundPaymentRequest = asyncHandler(async (req, res) => {
     },
   });
 });
+
+/**
+ * Verify payment intent and confirm booking
+ * @route POST /api/payments/verify
+ */
+export const verifyPaymentIntent = asyncHandler(async (req, res) => {
+  const { paymentIntentId } = req.body;
+
+  if (!paymentIntentId) {
+    throw new BadRequestError("Payment Intent ID is required");
+  }
+
+  // 1. Verify with Stripe
+  const verification = await verifyPayment(paymentIntentId);
+
+  if (!verification.success) {
+    throw new BadRequestError(`Payment verification failed: ${verification.error}`);
+  }
+
+  const paymentIntent = verification.data;
+
+  if (paymentIntent.status !== "succeeded") {
+    return res.json({
+      success: false,
+      message: `Payment status is ${paymentIntent.status}`,
+      status: paymentIntent.status,
+    });
+  }
+
+  // 2. Find Booking from metadata
+  const bookingId = paymentIntent.metadata.bookingId;
+  
+  if (!bookingId) {
+    // Try to find booking by searching for this payment intent if we stored it somewhere, 
+    // or maybe we can't link it if metadata is missing.
+    // But processPayment adds metadata, so it should be there.
+    throw new BadRequestError("Booking ID missing in payment metadata");
+  }
+
+  const booking = await Booking.findById(bookingId)
+    .populate("customer", "name email")
+    .populate("artist", "name email");
+
+  if (!booking) {
+    throw new NotFoundError("Booking not found");
+  }
+
+  // Check authorization
+  if (booking.customer._id.toString() !== req.userId.toString() && req.userRole !== "admin") {
+    throw new ForbiddenError("Not authorized to verify this payment");
+  }
+
+  // 3. Check if already paid
+  if (booking.paymentStatus === "paid") {
+    return res.json({
+      success: true,
+      message: "Booking already confirmed",
+      data: { booking },
+    });
+  }
+
+  // 4. Create Payment Record if not exists
+  let payment = await Payment.findOne({ transactionId: paymentIntentId });
+
+  if (!payment) {
+    payment = await Payment.create({
+      booking: booking._id,
+      customer: booking.customer._id,
+      artist: booking.artist._id,
+      amount: paymentIntent.amount / 100,
+      currency: paymentIntent.currency,
+      paymentMethod: paymentIntent.payment_method_types[0],
+      transactionId: paymentIntentId,
+      status: "completed",
+      paymentDate: new Date(),
+    });
+  } else {
+    payment.status = "completed";
+    await payment.save();
+  }
+
+  // 5. Update Booking
+  booking.status = "confirmed";
+  booking.paymentStatus = "paid";
+  booking.payment = payment._id;
+  await booking.save();
+
+  // 6. Create Chat
+  let chat = await Chat.findOne({ booking: booking._id });
+  if (!chat) {
+    chat = await Chat.create({
+      participants: [booking.customer._id, booking.artist._id],
+      booking: booking._id,
+      messages: [],
+      lastMessage: "Booking confirmed! You can now chat.",
+      lastMessageTimestamp: new Date(),
+    });
+  }
+
+  // 7. Notifications (Idempotency check ideally needed, but for now just send)
+  // To avoid duplicate notifications, we could check if we just updated the status from pending to paid.
+  // Since we checked booking.paymentStatus === "paid" earlier, we are safe.
+
+  // Notify Artist
+  await createNotification(
+    Notification,
+    booking.artist._id,
+    "Artist",
+    "payment_received",
+    "Payment Received",
+    `Payment received for booking. Amount: $${booking.totalAmount}`,
+    payment._id,
+    "Payment"
+  );
+  
+  await createNotification(
+    Notification,
+    booking.artist._id,
+    "Artist",
+    "booking_confirmed",
+    "Booking Confirmed",
+    `New booking confirmed with ${booking.customer.name}`,
+    booking._id,
+    "Booking"
+  );
+
+  // Notify Customer
+  await createNotification(
+    Notification,
+    booking.customer._id,
+    "Customer",
+    "booking_confirmed",
+    "Booking Confirmed",
+    `Your booking with ${booking.artist.name} is confirmed!`,
+    booking._id,
+    "Booking"
+  );
+
+  res.json({
+    success: true,
+    message: "Payment verified and booking confirmed",
+    data: {
+      booking,
+      payment,
+      chatId: chat._id,
+    },
+  });
+});

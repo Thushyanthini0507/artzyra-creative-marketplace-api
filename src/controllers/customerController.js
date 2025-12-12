@@ -140,7 +140,6 @@ export const getBookings = asyncHandler(async (req, res) => {
     status,          // Booking status filter
     paymentStatus,   // Payment status filter
     artist,          // Artist ID filter
-    category,        // Category ID filter
     startDate,       // Start date for date range
     endDate,         // End date for date range
     minAmount,       // Minimum booking amount
@@ -167,17 +166,11 @@ export const getBookings = asyncHandler(async (req, res) => {
     query.paymentStatus = paymentStatus;
   }
 
-  // ARTIST AND CATEGORY FILTERS
+  // ARTIST FILTER
   // Filter by specific artist ID
   // Example: ?artist=691aa51d3e6a1cca987f9223
   if (artist) {
     query.artist = artist;
-  }
-  
-  // Filter by specific category ID
-  // Example: ?category=69159852bcea8d9de167502f
-  if (category) {
-    query.category = category;
   }
 
   // DATE RANGE FILTER
@@ -240,8 +233,7 @@ export const getBookings = asyncHandler(async (req, res) => {
   // EXECUTE QUERY
   // Find bookings matching the query, populate related data, apply pagination and sorting
   const bookings = await Booking.find(query)
-    .populate("artist", "name email phone profileImage rating category")
-    .populate("category", "name description")
+    .populate("artist", "name email profileImage")
     .skip(skip)      // Skip documents for pagination
     .limit(limitNum) // Limit number of results
     .sort(sort);     // Sort results

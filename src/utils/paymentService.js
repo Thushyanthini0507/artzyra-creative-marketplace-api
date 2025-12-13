@@ -7,8 +7,11 @@ let stripeInstance;
 const getStripe = () => {
   if (!stripeInstance) {
     if (!process.env.STRIPE_SECRET_KEY) {
-      throw new Error("STRIPE_SECRET_KEY is missing in environment variables");
+      console.error("❌ STRIPE_SECRET_KEY is not configured in environment variables");
+      console.error("Available env vars:", Object.keys(process.env).filter(k => k.includes('STRIPE')));
+      throw new Error("STRIPE_SECRET_KEY is missing in environment variables. Please configure it in Vercel.");
     }
+    console.log("✅ Stripe initialized with key:", process.env.STRIPE_SECRET_KEY.substring(0, 7) + '...');
     stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY);
   }
   return stripeInstance;
@@ -23,6 +26,27 @@ export const processPayment = async (paymentData) => {
   const stripe = getStripe();
   try {
     const { amount, currency = "usd", paymentMethodId, bookingId, customerId, artistId, artistStripeAccountId } = paymentData;
+
+    // Validate required fields
+    if (!amount || amount <= 0) {
+      throw new Error("Invalid payment amount: " + amount);
+    }
+    if (!bookingId) {
+      throw new Error("Booking ID is required");
+    }
+    if (!customerId) {
+      throw new Error("Customer ID is required");
+    }
+    if (!artistId) {
+      throw new Error("Artist ID is required");
+    }
+
+    console.log("💳 Processing payment:", {
+      amount,
+      currency,
+      bookingId,
+      hasPaymentMethod: !!paymentMethodId,
+    });
 
     // Calculate platform fee (e.g., 10%)
     const platformFeePercent = 0.10;
@@ -56,7 +80,9 @@ export const processPayment = async (paymentData) => {
       paymentIntentData.application_fee_amount = applicationFeeAmount;
     }
 
+    console.log("🔄 Creating Stripe PaymentIntent...");
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
+    console.log("✅ PaymentIntent created:", paymentIntent.id);
 
     return {
       success: true,
@@ -66,10 +92,24 @@ export const processPayment = async (paymentData) => {
       data: paymentIntent,
     };
   } catch (error) {
-    console.error("Payment processing error:", error);
+    console.error("❌ Payment processing error:", {
+      message: error.message,
+      type: error.type,
+      code: error.code,
+      statusCode: error.statusCode,
+      param: error.param,
+      paymentData: {
+        amount: paymentData.amount,
+        bookingId: paymentData.bookingId,
+        customerId: paymentData.customerId,
+        artistId: paymentData.artistId,
+      },
+    });
     return {
       success: false,
-      error: error.message,
+      error: error.message || "Payment processing failed",
+      errorType: error.type,
+      errorCode: error.code,
     };
   }
 };

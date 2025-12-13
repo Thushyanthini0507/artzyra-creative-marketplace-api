@@ -27,6 +27,13 @@ import { formatPaginationResponse } from "../utils/paginate.js";
 export const createPayment = asyncHandler(async (req, res) => {
   const { bookingId, paymentMethod } = req.body;
 
+  console.log("💳 Create Payment Request:", {
+    bookingId,
+    hasPaymentMethod: !!paymentMethod,
+    paymentMethodType: typeof paymentMethod,
+    body: req.body
+  });
+
   if (!bookingId) {
     throw new BadRequestError(
       "Please provide bookingId"
@@ -39,6 +46,18 @@ export const createPayment = asyncHandler(async (req, res) => {
 
   if (!booking) {
     throw new NotFoundError("Booking not found");
+  }
+
+  // Validate booking has required data
+  if (!booking.totalAmount || booking.totalAmount <= 0) {
+    console.error("❌ Booking missing totalAmount:", {
+      bookingId: booking._id,
+      totalAmount: booking.totalAmount,
+      service: booking.service,
+    });
+    throw new BadRequestError(
+      "Booking does not have a valid total amount. Please ensure the booking is properly created."
+    );
   }
 
   // Check authorization
@@ -54,6 +73,13 @@ export const createPayment = asyncHandler(async (req, res) => {
     );
   }
 
+  console.log("💳 Creating payment for booking:", {
+    bookingId: booking._id,
+    customerId: booking.customer._id,
+    artistId: booking.artist._id,
+    amount: booking.totalAmount,
+  });
+
   // Process payment
   const paymentResult = await processPayment({
     bookingId: booking._id,
@@ -65,14 +91,17 @@ export const createPayment = asyncHandler(async (req, res) => {
   });
 
   if (!paymentResult.success) {
+    console.error("❌ Payment processing failed:", paymentResult);
     throw new BadRequestError(
-      `Payment processing failed: ${paymentResult.error}`
+      `Payment processing failed: ${paymentResult.error}${paymentResult.errorCode ? ' (Code: ' + paymentResult.errorCode + ')' : ''}`
     );
   }
 
   // If no paymentMethod was provided, just return clientSecret for Payment Element
   // The actual payment confirmation will happen via verifyPaymentIntent endpoint
-  if (!paymentMethod) {
+  // We check for null, undefined, or empty string
+  if (!paymentMethod || paymentMethod === "") {
+    console.log("ℹ️ No payment method provided, returning client secret only");
     return res.status(200).json({
       success: true,
       message: "Payment intent created successfully",
@@ -91,7 +120,7 @@ export const createPayment = asyncHandler(async (req, res) => {
     amount: booking.totalAmount,
     currency: "USD",
     paymentMethod,
-    transactionId: paymentResult.transactionId,
+    stripePaymentIntentId: paymentResult.transactionId,
     status: paymentResult.status === "succeeded" ? "completed" : "pending",
     paymentDate: new Date(),
   });
@@ -296,9 +325,9 @@ export const getPayments = asyncHandler(async (req, res) => {
   }
 
   // SEARCH FILTER
-  // Searches in transactionId field
+  // Searches in stripePaymentIntentId field
   if (search) {
-    query.transactionId = { $regex: search, $options: "i" };
+    query.stripePaymentIntentId = { $regex: search, $options: "i" };
   }
 
   // PAGINATION AND SORTING
@@ -353,7 +382,7 @@ export const refundPaymentRequest = asyncHandler(async (req, res) => {
 
   const refundAmount = amount || payment.amount;
   const refundResult = await refundPayment(
-    payment.transactionId,
+    payment.stripePaymentIntentId,
     refundAmount
   );
 
@@ -455,7 +484,7 @@ export const verifyPaymentIntent = asyncHandler(async (req, res) => {
   }
 
   // 4. Create Payment Record if not exists
-  let payment = await Payment.findOne({ transactionId: paymentIntentId });
+  let payment = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
 
   if (!payment) {
     payment = await Payment.create({
@@ -464,8 +493,9 @@ export const verifyPaymentIntent = asyncHandler(async (req, res) => {
       artist: booking.artist._id,
       amount: paymentIntent.amount / 100,
       currency: paymentIntent.currency,
+      currency: paymentIntent.currency,
       paymentMethod: paymentIntent.payment_method_types[0],
-      transactionId: paymentIntentId,
+      stripePaymentIntentId: paymentIntentId,
       status: "completed",
       paymentDate: new Date(),
     });

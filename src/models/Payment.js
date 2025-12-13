@@ -32,7 +32,7 @@ const paymentSchema = new mongoose.Schema(
     },
     stripePaymentIntentId: {
       type: String,
-      required: true,
+      // required: true, // Made optional to allow creation before payment intent is fully confirmed/available in some flows
     },
     stripeChargeId: {
       type: String,

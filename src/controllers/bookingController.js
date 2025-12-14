@@ -59,6 +59,13 @@ export const createBooking = asyncHandler(async (req, res) => {
     throw new NotFoundError("Artist not found");
   }
 
+  // Prevent booking physical artists - they should be contacted via chat instead
+  if (artistProfile.artistType === "physical") {
+    throw new BadRequestError(
+      "Physical artists cannot be booked through the platform. Please contact them directly via chat to discuss your requirements."
+    );
+  }
+
   // Check artist availability status
   if (artistProfile.availability && typeof artistProfile.availability === "object") {
     const availabilityMap = artistProfile.availability instanceof Map 

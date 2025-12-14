@@ -19,6 +19,7 @@ const categories = [
     description:
       "Professional animators and motion graphics artists. 2D and 3D animation, video editing, and creative visual storytelling.",
     image: `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/w_150,h_150,c_fill,f_auto,q_auto/animator.jpg`,
+    type: "remote",
     isActive: true,
   },
   {
@@ -26,6 +27,7 @@ const categories = [
     description:
       "Professional catering services for events, weddings, and corporate functions. Custom menus, food presentation, and exceptional service.",
     image: `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/w_150,h_150,c_fill,f_auto,q_auto/caterer.jpg`,
+    type: "physical",
     isActive: true,
   },
   {

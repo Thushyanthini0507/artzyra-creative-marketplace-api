@@ -122,7 +122,7 @@ export const getArtistById = asyncHandler(async (req, res) => {
     _id: id,
     status: "approved",
   })
-    .populate("userId", "email")
+    .populate("userId", "email phone")
     .populate("category", "name description image type");
 
   if (!artist) {
@@ -135,11 +135,12 @@ export const getArtistById = asyncHandler(async (req, res) => {
     await artist.save();
   }
 
-  // Format response with user email
+  // Format response with user email and phone
   const artistObj = artist.toObject();
   const formattedArtist = {
     ...artistObj,
     email: artistObj.userId?.email || "",
+    phone: artistObj.phone || artistObj.userId?.phone || "",
     userId: artistObj.userId?._id || artistObj.userId,
   };
 

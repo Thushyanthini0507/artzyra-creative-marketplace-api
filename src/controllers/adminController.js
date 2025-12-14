@@ -467,11 +467,11 @@ export const getDashboardStatus = asyncHandler(async (req, res) => {
     Booking.countDocuments(),
     Booking.countDocuments({ status: "pending" }),
     Payment.aggregate([
-      { $match: { status: "completed" } },
+      { $match: { status: "succeeded" } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     Category.countDocuments({ isActive: true }),
-    Payment.countDocuments({ status: "completed" }),
+    Payment.countDocuments({ status: "succeeded" }),
     Review.countDocuments({ isVisible: true }),
   ]);
 

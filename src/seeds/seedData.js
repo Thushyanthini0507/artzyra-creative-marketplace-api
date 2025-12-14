@@ -1417,8 +1417,8 @@ const seedData = async () => {
     console.log(`   - ${reviews.length} Reviews`);
     console.log(
       `   - ${payments.length} Payments (${
-        payments.filter((p) => p.status === "completed").length
-      } completed, ${
+        payments.filter((p) => p.status === "succeeded").length
+      } succeeded, ${
         payments.filter((p) => p.status === "pending").length
       } pending, ${
         payments.filter((p) => p.status === "refunded").length

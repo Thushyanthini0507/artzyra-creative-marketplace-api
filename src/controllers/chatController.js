@@ -1,5 +1,7 @@
 import Chat from "../models/Chat.js";
 import Booking from "../models/Booking.js";
+import Artist from "../models/Artist.js";
+import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { createNotification } from "../utils/helpers.js";
 import { asyncHandler } from "../middleware/authMiddleware.js";
@@ -67,6 +69,60 @@ export const getChatById = asyncHandler(async (req, res) => {
   }
 
   res.json({
+    success: true,
+    data: chat,
+  });
+});
+
+/**
+ * Create or get a chat with an artist (for physical artists - direct communication)
+ * @route POST /api/chats/create
+ */
+export const createChatWithArtist = asyncHandler(async (req, res) => {
+  const { artistId } = req.body;
+
+  if (!artistId) {
+    throw new BadRequestError("Artist ID is required");
+  }
+
+  // Verify artist exists (artistId is the Artist document _id, not userId)
+  const artistProfile = await Artist.findById(artistId);
+  if (!artistProfile) {
+    throw new NotFoundError("Artist not found");
+  }
+
+  // Get the artist's user ID (from the userId field in Artist model)
+  const artistUserId = artistProfile.userId;
+
+  // Prevent chatting with yourself
+  if (req.userId.toString() === artistUserId.toString()) {
+    throw new BadRequestError("You cannot chat with yourself");
+  }
+
+  // Check if chat already exists between these two users
+  let chat = await Chat.findOne({
+    participants: { $all: [req.userId, artistUserId] },
+    booking: { $exists: false }, // Only find chats without bookings
+  })
+    .populate("participants", "name email profileImage")
+    .populate("booking", "service status");
+
+  if (!chat) {
+    // Create new chat
+    chat = await Chat.create({
+      participants: [req.userId, artistUserId],
+      messages: [],
+      lastMessage: null,
+      lastMessageTimestamp: new Date(),
+    });
+
+    // Populate the chat
+    chat = await Chat.findById(chat._id)
+      .populate("participants", "name email profileImage")
+      .populate("booking", "service status");
+  }
+
+  res.status(201).json({
     success: true,
     data: chat,
   });

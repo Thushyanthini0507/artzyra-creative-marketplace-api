@@ -121,7 +121,7 @@ export const createPayment = asyncHandler(async (req, res) => {
     currency: "USD",
     paymentMethod,
     stripePaymentIntentId: paymentResult.transactionId,
-    status: paymentResult.status === "succeeded" ? "completed" : "pending",
+    status: paymentResult.status === "succeeded" ? "succeeded" : "pending",
     paymentDate: new Date(),
   });
 
@@ -241,7 +241,7 @@ export const getPaymentById = asyncHandler(async (req, res) => {
  * EXPLANATION:
  * - Role-based: Customers/artists see only their payments, admins see all
  * - search: Searches in transactionId field
- * - status: Payment status (pending, completed, refunded)
+ * - status: Payment status (pending, succeeded, failed, refunded)
  * - paymentMethod: Filter by payment method
  * - customer/artist: Admin can filter by specific users
  * - booking: Filter by booking ID
@@ -376,8 +376,8 @@ export const refundPaymentRequest = asyncHandler(async (req, res) => {
     throw new ForbiddenError("Only admins can process refunds");
   }
 
-  if (payment.status !== "completed") {
-    throw new BadRequestError("Only completed payments can be refunded");
+  if (payment.status !== "succeeded") {
+    throw new BadRequestError("Only succeeded payments can be refunded");
   }
 
   const refundAmount = amount || payment.amount;
@@ -522,7 +522,7 @@ export const verifyPaymentIntent = asyncHandler(async (req, res) => {
         currency: paymentIntent.currency,
         paymentMethod: paymentIntent.payment_method_types[0],
         stripePaymentIntentId: paymentIntentId,
-        status: "completed",
+        status: "succeeded",
         paymentDate: new Date(),
       });
       console.log("✅ Payment record created:", payment._id);
@@ -532,7 +532,7 @@ export const verifyPaymentIntent = asyncHandler(async (req, res) => {
     }
   } else {
     console.log("🔄 Updating existing payment record:", payment._id);
-    payment.status = "completed";
+    payment.status = "succeeded";
     await payment.save();
   }
 

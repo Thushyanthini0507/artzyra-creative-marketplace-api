@@ -34,7 +34,7 @@ const chatSchema = new mongoose.Schema(
     booking: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Booking",
-      required: true,
+      required: false, // Optional - allows direct artist-customer chats without booking
     },
     messages: [messageSchema],
     lastMessage: {

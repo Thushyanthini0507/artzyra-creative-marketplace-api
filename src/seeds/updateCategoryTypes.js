@@ -123,3 +123,4 @@ const updateCategoryTypes = async () => {
 // Run the update function
 updateCategoryTypes();
 
+

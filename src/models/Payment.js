@@ -27,8 +27,27 @@ const paymentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "succeeded", "failed", "refunded"],
+      enum: ["pending", "held", "succeeded", "failed", "refunded"],
       default: "pending",
+    },
+    // Platform commission tracking
+    platformCommissionPercent: {
+      type: Number,
+      default: 15, // 15% platform commission
+    },
+    platformCommissionAmount: {
+      type: Number,
+    },
+    artistPayoutAmount: {
+      type: Number,
+    },
+    // Payment release tracking
+    releasedAt: {
+      type: Date,
+    },
+    releasedToArtist: {
+      type: Boolean,
+      default: false,
     },
     stripePaymentIntentId: {
       type: String,
@@ -36,6 +55,9 @@ const paymentSchema = new mongoose.Schema(
     },
     stripeChargeId: {
       type: String,
+    },
+    stripeTransferId: {
+      type: String, // For tracking transfer to artist
     },
     paymentMethod: {
       type: String,

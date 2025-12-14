@@ -4,6 +4,7 @@ import {
   getBookingById,
   updateBookingStatus,
   completeBooking,
+  confirmOrderCompletion,
   getBookings,
   requestRevision,
   approveBooking,
@@ -32,7 +33,8 @@ router.post("/", createBooking);
 router.get("/", getBookings);
 router.get("/:id", getBookingById);
 router.patch("/:id/status", updateBookingStatus);
-router.post("/:id/complete", completeBooking);
+router.post("/:id/complete", completeBooking); // Artist marks work as done
+router.post("/:id/confirm-completion", confirmOrderCompletion); // Customer confirms completion & releases payment
 router.post("/:id/revision", requestRevision);
 router.post("/:id/approve", approveBooking);
 router.post("/:id/cancel", cancelBooking);

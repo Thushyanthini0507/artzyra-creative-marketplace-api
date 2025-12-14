@@ -112,7 +112,12 @@ export const createPayment = asyncHandler(async (req, res) => {
     });
   }
 
-  // If paymentMethod was provided, create payment record and complete the booking
+  // If paymentMethod was provided, create payment record and hold payment in escrow
+  // Calculate commission (15% platform fee)
+  const platformCommissionPercent = 15;
+  const platformCommissionAmount = (booking.totalAmount * platformCommissionPercent) / 100;
+  const artistPayoutAmount = booking.totalAmount - platformCommissionAmount;
+
   const payment = await Payment.create({
     booking: bookingId,
     customer: booking.customer._id,
@@ -121,15 +126,19 @@ export const createPayment = asyncHandler(async (req, res) => {
     currency: "USD",
     paymentMethod,
     stripePaymentIntentId: paymentResult.transactionId,
-    status: paymentResult.status === "succeeded" ? "succeeded" : "pending",
+    status: paymentResult.status === "succeeded" ? "held" : "pending", // Payment held in escrow
     paymentDate: new Date(),
+    platformCommissionPercent,
+    platformCommissionAmount,
+    artistPayoutAmount,
+    releasedToArtist: false,
   });
 
-  // Update booking status to in_progress (auto-confirmed when payment succeeds)
-  // No manual approval needed - payment confirmation = booking confirmation
+  // Update booking status to in_progress (auto-confirmed when payment is held)
+  // Payment is held in escrow until customer confirms order completion
   booking.status = "in_progress";
   booking.paymentStatus =
-    paymentResult.status === "succeeded" ? "paid" : "pending";
+    paymentResult.status === "succeeded" ? "held" : "pending"; // Payment held, not released
   booking.payment = payment._id;
 
   // Create or Find Chat - Enable chat access after payment confirmation
@@ -152,38 +161,38 @@ export const createPayment = asyncHandler(async (req, res) => {
   await booking.save();
 
   // Send Notifications to both parties
-  // Notify Customer: Booking confirmed
+  // Notify Customer: Booking confirmed (payment held)
   await createNotification(
     Notification,
     booking.customer._id,
     "Customer",
     "booking_confirmed",
     "Booking Confirmed",
-    `Your booking with ${booking.artist.name} has been confirmed! Payment successful. You can now chat with the artist.`,
+    `Your booking with ${booking.artist.name} has been confirmed! Payment has been secured. You can now chat with the artist. Payment will be released when you confirm order completion.`,
     booking._id,
     "Booking"
   );
 
-  // Notify Artist: New booking received
+  // Notify Artist: New booking received (payment held)
   await createNotification(
     Notification,
     booking.artist._id,
     "Artist",
     "booking_confirmed",
     "New Booking Received",
-    `You have a new confirmed booking from ${booking.customer.name}. Payment received: $${booking.totalAmount}. Chat is now available.`,
+    `You have a new confirmed booking from ${booking.customer.name}. Payment of $${booking.totalAmount} is secured. Chat is now available. Payment will be released after customer confirms order completion.`,
     booking._id,
     "Booking"
   );
   
-  // Also notify artist about payment
+  // Also notify artist about payment held
   await createNotification(
     Notification,
     booking.artist._id,
     "Artist",
-    "payment_received",
-    "Payment Received",
-    `Payment of $${booking.totalAmount} received for booking with ${booking.customer.name}`,
+    "payment_held",
+    "Payment Secured",
+    `Payment of $${booking.totalAmount} has been secured for booking with ${booking.customer.name}. It will be released after order completion.`,
     payment._id,
     "Payment"
   );
@@ -514,38 +523,54 @@ export const verifyPaymentIntent = asyncHandler(async (req, res) => {
     });
   }
 
-  // 4. Create Payment Record if not exists
+  // 4. Create Payment Record if not exists - Payment is HELD in escrow
   let payment = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
 
   if (!payment) {
-    console.log("💾 Creating new payment record...");
+    console.log("Creating new payment record (held in escrow)...");
     try {
+      const totalAmount = paymentIntent.amount / 100;
+      const platformCommissionPercent = 15; // 15% platform commission
+      const platformCommissionAmount = (totalAmount * platformCommissionPercent) / 100;
+      const artistPayoutAmount = totalAmount - platformCommissionAmount;
+
       payment = await Payment.create({
         booking: booking._id,
         customer: booking.customer._id,
         artist: booking.artist._id,
-        amount: paymentIntent.amount / 100,
+        amount: totalAmount,
         currency: paymentIntent.currency,
         paymentMethod: paymentIntent.payment_method_types[0],
         stripePaymentIntentId: paymentIntentId,
-        status: "succeeded",
+        status: "held", // Payment held in escrow until order completion
         paymentDate: new Date(),
+        platformCommissionPercent,
+        platformCommissionAmount,
+        artistPayoutAmount,
+        releasedToArtist: false,
       });
-      console.log("Payment record created:", payment._id);
+      console.log("Payment record created (held):", payment._id);
     } catch (error) {
       console.error("Error creating payment record:", error);
       throw error;
     }
   } else {
-    console.log("🔄 Updating existing payment record:", payment._id);
-    payment.status = "succeeded";
+    console.log("Updating existing payment record:", payment._id);
+    // Calculate commission if not already set
+    if (!payment.platformCommissionAmount) {
+      const platformCommissionPercent = 15;
+      payment.platformCommissionPercent = platformCommissionPercent;
+      payment.platformCommissionAmount = (payment.amount * platformCommissionPercent) / 100;
+      payment.artistPayoutAmount = payment.amount - payment.platformCommissionAmount;
+    }
+    payment.status = "held";
     await payment.save();
   }
 
-  // 5. Update Booking - Auto-confirm booking when payment succeeds
-  // No manual approval needed - payment confirmation = booking confirmation
+  // 5. Update Booking - Auto-confirm booking when payment is held
+  // Payment is held in escrow until customer confirms order completion
   booking.status = "in_progress";
-  booking.paymentStatus = "paid";
+  booking.paymentStatus = "held"; // Payment held, not released yet
   booking.payment = payment._id;
 
   // 6. Create Chat - Enable chat access after payment confirmation
@@ -565,38 +590,38 @@ export const verifyPaymentIntent = asyncHandler(async (req, res) => {
   await booking.save();
 
   // 7. Send Notifications to both parties
-  // Notify Customer: Booking confirmed
+  // Notify Customer: Booking confirmed (payment held)
   await createNotification(
     Notification,
     booking.customer._id,
     "Customer",
     "booking_confirmed",
     "Booking Confirmed",
-    `Your booking with ${booking.artist.name} has been confirmed! Payment successful. You can now chat with the artist.`,
+    `Your booking with ${booking.artist.name} has been confirmed! Payment has been secured. You can now chat with the artist. Payment will be released when you confirm order completion.`,
     booking._id,
     "Booking"
   );
 
-  // Notify Artist: New booking received
+  // Notify Artist: New booking received (payment held)
   await createNotification(
     Notification,
     booking.artist._id,
     "Artist",
     "booking_confirmed",
     "New Booking Received",
-    `You have a new confirmed booking from ${booking.customer.name}. Payment received: $${booking.totalAmount}. Chat is now available.`,
+    `You have a new confirmed booking from ${booking.customer.name}. Payment of $${booking.totalAmount} is secured. Chat is now available. Payment will be released after customer confirms order completion.`,
     booking._id,
     "Booking"
   );
   
-  // Also notify artist about payment
+  // Also notify artist about payment held
   await createNotification(
     Notification,
     booking.artist._id,
     "Artist",
-    "payment_received",
-    "Payment Received",
-    `Payment of $${booking.totalAmount} received for booking with ${booking.customer.name}`,
+    "payment_held",
+    "Payment Secured",
+    `Payment of $${booking.totalAmount} has been secured for booking with ${booking.customer.name}. It will be released after order completion.`,
     payment._id,
     "Payment"
   );

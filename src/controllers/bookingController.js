@@ -267,7 +267,7 @@ export const updateBookingStatus = asyncHandler(async (req, res) => {
 });
 
 /**
- * Mark booking as completed
+ * Artist marks work as completed (moves to review status)
  * @route POST /api/bookings/:id/complete
  */
 export const completeBooking = asyncHandler(async (req, res) => {
@@ -295,8 +295,8 @@ export const completeBooking = asyncHandler(async (req, res) => {
     booking.customer,
     "Customer",
     "booking_review",
-    "Booking Ready for Review",
-    "Your booking is ready for review. Please review and approve.",
+    "Order Ready for Review",
+    "Your order is ready for review. Please review and confirm completion.",
     booking._id,
     "Booking"
   );
@@ -304,6 +304,105 @@ export const completeBooking = asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: booking,
+  });
+});
+
+/**
+ * Customer confirms order completion - Releases payment to artist with 15% commission
+ * @route POST /api/bookings/:id/confirm-completion
+ */
+export const confirmOrderCompletion = asyncHandler(async (req, res) => {
+  const booking = await Booking.findById(req.params.id)
+    .populate("customer", "name email")
+    .populate("artist", "name email");
+
+  if (!booking) {
+    throw new NotFoundError("Booking not found");
+  }
+
+  // Only customer can confirm order completion
+  if (booking.customer._id.toString() !== req.userId.toString() && req.userRole !== "admin") {
+    throw new ForbiddenError("Only the customer can confirm order completion");
+  }
+
+  // Booking must be in review status
+  if (booking.status !== "review") {
+    throw new BadRequestError("Order must be in review status before confirming completion");
+  }
+
+  // Payment must be held
+  if (booking.paymentStatus !== "held") {
+    throw new BadRequestError("Payment must be held before releasing to artist");
+  }
+
+  // Find the payment record
+  const Payment = (await import("../models/Payment.js")).default;
+  const payment = await Payment.findOne({ booking: booking._id });
+
+  if (!payment) {
+    throw new NotFoundError("Payment record not found");
+  }
+
+  if (payment.status !== "held") {
+    throw new BadRequestError("Payment is not held. Cannot release payment.");
+  }
+
+  // Calculate commission and payout (should already be calculated, but recalculate to be safe)
+  const platformCommissionPercent = payment.platformCommissionPercent || 15;
+  const platformCommissionAmount = payment.platformCommissionAmount || (payment.amount * platformCommissionPercent) / 100;
+  const artistPayoutAmount = payment.artistPayoutAmount || (payment.amount - platformCommissionAmount);
+
+  // Release payment to artist (in real implementation, this would transfer to artist's Stripe account)
+  // For now, we'll mark it as released
+  payment.status = "succeeded";
+  payment.releasedToArtist = true;
+  payment.releasedAt = new Date();
+  payment.platformCommissionPercent = platformCommissionPercent;
+  payment.platformCommissionAmount = platformCommissionAmount;
+  payment.artistPayoutAmount = artistPayoutAmount;
+  await payment.save();
+
+  // Update booking status to completed
+  booking.status = "completed";
+  booking.paymentStatus = "paid";
+  await booking.save();
+
+  // Notify artist - Payment released
+  await createNotification(
+    Notification,
+    booking.artist._id,
+    "Artist",
+    "payment_released",
+    "Payment Released",
+    `Payment of $${artistPayoutAmount.toFixed(2)} has been released to you. Platform commission (${platformCommissionPercent}%): $${platformCommissionAmount.toFixed(2)}`,
+    payment._id,
+    "Payment"
+  );
+
+  // Notify customer - Order completed
+  await createNotification(
+    Notification,
+    booking.customer._id,
+    "Customer",
+    "order_completed",
+    "Order Completed",
+    `Your order with ${booking.artist.name} has been completed. Payment has been released to the artist. You can now leave a review.`,
+    booking._id,
+    "Booking"
+  );
+
+  res.json({
+    success: true,
+    message: "Order confirmed and payment released to artist",
+    data: {
+      booking,
+      payment: {
+        totalAmount: payment.amount,
+        platformCommission: platformCommissionAmount,
+        artistPayout: artistPayoutAmount,
+        releasedAt: payment.releasedAt,
+      },
+    },
   });
 });
 

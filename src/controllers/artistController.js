@@ -692,6 +692,9 @@ export const approveArtist = asyncHandler(async (req, res) => {
         skills: pendingArtist.skills,
         hourlyRate: pendingArtist.hourlyRate,
         availability: pendingArtist.availability,
+        services: pendingArtist.services || [],
+        pricing: pendingArtist.pricing,
+        deliveryTime: pendingArtist.deliveryTime,
         status: "approved",
         verifiedAt: new Date(),
       });
@@ -737,6 +740,9 @@ export const approveArtist = asyncHandler(async (req, res) => {
         skills: pendingArtist.skills,
         hourlyRate: pendingArtist.hourlyRate,
         availability: pendingArtist.availability,
+        services: pendingArtist.services || [],
+        pricing: pendingArtist.pricing,
+        deliveryTime: pendingArtist.deliveryTime,
         status: "approved",
         verifiedAt: new Date(),
       });

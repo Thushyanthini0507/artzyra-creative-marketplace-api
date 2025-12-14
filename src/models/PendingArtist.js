@@ -78,8 +78,36 @@ const pendingArtistSchema = new mongoose.Schema(
       currency: { type: String, default: "LKR" },
     },
     deliveryTime: {
-      type: Number, // Days (for Remote)
+      type: Number, // Days (for Remote) - deprecated, use services[].deliveryTime
     },
+    // Services array for remote artists (Fiverr-style)
+    services: [
+      {
+        name: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        price: {
+          type: Number,
+          required: true,
+          min: 0,
+        },
+        deliveryTime: {
+          type: Number, // Days
+          required: true,
+          min: 1,
+        },
+        description: {
+          type: String,
+          trim: true,
+        },
+        currency: {
+          type: String,
+          default: "LKR",
+        },
+      },
+    ],
     // Status
     status: {
       type: String,

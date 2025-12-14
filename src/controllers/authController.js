@@ -523,6 +523,29 @@ export const registerArtist = asyncHandler(async (req, res) => {
     pricingData = { ...pricingData, ...req.body.pricing };
   }
 
+  // Process services array for remote artists
+  let servicesArray = [];
+  if (req.body.services && Array.isArray(req.body.services)) {
+    servicesArray = req.body.services
+      .filter((service) => service && service.name && service.price && service.deliveryTime)
+      .map((service) => ({
+        name: String(service.name).trim(),
+        price: Number(service.price) || 0,
+        deliveryTime: Number(service.deliveryTime) || 1,
+        description: service.description ? String(service.description).trim() : "",
+        currency: service.currency || "LKR",
+      }))
+      .filter((service) => service.name.length > 0 && service.price > 0 && service.deliveryTime > 0);
+  }
+
+  // For remote artists, services are required if category type is remote
+  const isRemoteCategory = categoryExists.type === "remote";
+  if (isRemoteCategory && servicesArray.length === 0) {
+    throw new BadRequestError(
+      "At least one service with name, price, and delivery time is required for remote category artists."
+    );
+  }
+
   // Create pending artist (password will be hashed by pre-save hook)
   // Mongoose will automatically convert the plain object to a Map for the availability field
   const pendingArtist = await PendingArtist.create({
@@ -538,6 +561,7 @@ export const registerArtist = asyncHandler(async (req, res) => {
     availability: availabilityData,
     pricing: pricingData,
     deliveryTime: req.body.deliveryTime,
+    services: servicesArray,
     status: "pending",
   });
 
